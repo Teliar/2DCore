@@ -1062,11 +1062,27 @@ namespace _2DCore
             return header;
         }
 
+        private Image? LoadEngineIcon(params string[] fileNames)
+        {
+            foreach (var fileName in fileNames)
+            {
+                string iconPath = Path.Combine(AppContext.BaseDirectory, "EditorAssets", "Icons", fileName);
+                if (File.Exists(iconPath))
+                {
+                    try
+                    {
+                        return Image.FromFile(iconPath);
+                    }
+                    catch { }
+                }
+            }
+            return null;
+        }
+
         private Image LoadSoundTriggerIcon()
         {
-            if (File.Exists("SoundTrigger.png")) { try { return Image.FromFile("SoundTrigger.png"); } catch { } }
-            if (File.Exists("sound_trigger.png")) { try { return Image.FromFile("sound_trigger.png"); } catch { } }
-            if (File.Exists("sound.png")) { try { return Image.FromFile("sound.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("SoundTrigger.png", "sound_trigger.png", "sound.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(24, 24);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1085,8 +1101,8 @@ namespace _2DCore
 
         private Image LoadSoundServiceIcon()
         {
-            if (File.Exists("sound_add.png")) { try { return Image.FromFile("sound_add.png"); } catch { } }
-            if (File.Exists("sound.png")) { try { return Image.FromFile("sound.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("sound_add.png", "sound.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1105,8 +1121,8 @@ namespace _2DCore
 
         private Image LoadSoundIcon()
         {
-            if (File.Exists("sound.png")) { try { return Image.FromFile("sound.png"); } catch { } }
-            if (File.Exists("SoundTrigger.png")) { try { return Image.FromFile("SoundTrigger.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("sound.png", "SoundTrigger.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1125,7 +1141,8 @@ namespace _2DCore
 
         private Image LoadFolderIcon()
         {
-            if (File.Exists("folder.png")) { try { return Image.FromFile("folder.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("folder.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1144,7 +1161,8 @@ namespace _2DCore
 
         private Image LoadFolderPageIcon()
         {
-            if (File.Exists("folder_page.png")) { try { return Image.FromFile("folder_page.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("folder_page.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1169,7 +1187,8 @@ namespace _2DCore
 
         private Image LoadShapeHandlesIcon()
         {
-            if (File.Exists("shape_handles.png")) { try { return Image.FromFile("shape_handles.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("shape_handles.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1196,7 +1215,8 @@ namespace _2DCore
 
         private Image LoadTerminalIcon()
         {
-            if (File.Exists("application_osx_terminal.png")) { try { return Image.FromFile("application_osx_terminal.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("application_osx_terminal.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1224,8 +1244,8 @@ namespace _2DCore
 
         private Image LoadCogIcon()
         {
-            if (File.Exists("IconCore.png")) { try { return Image.FromFile("IconCore.png"); } catch { } }
-            if (File.Exists("cog.png")) { try { return Image.FromFile("cog.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("IconCore.png", "cog.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1241,7 +1261,8 @@ namespace _2DCore
 
         private Image LoadCameraIcon()
         {
-            if (File.Exists("camera.png")) { try { return Image.FromFile("camera.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("camera.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1257,7 +1278,8 @@ namespace _2DCore
 
         private Image LoadImagesIcon()
         {
-            if (File.Exists("images.png")) { try { return Image.FromFile("images.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("images.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -1272,7 +1294,8 @@ namespace _2DCore
 
         private Image LoadAddIcon()
         {
-            if (File.Exists("add.png")) { try { return Image.FromFile("add.png"); } catch { } }
+            Image? loaded = LoadEngineIcon("add.png");
+            if (loaded != null) return loaded;
 
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
