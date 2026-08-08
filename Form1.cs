@@ -2363,16 +2363,32 @@ namespace _2DCore
                         return false;
                     }
 
-                    string sceneRelPath = projDto.StartScene;
+                    if (projDto.FormatVersion > 1)
+                    {
+                        Log($"Предупреждение: Проект имеет более новую версию формата (v{projDto.FormatVersion}).", LogType.Warning);
+                    }
+
+                    string sceneRelPath = projDto.StartScene ?? "scenes/main.2dscene";
                     string sceneAbsPath = Path.IsPathRooted(sceneRelPath) ? sceneRelPath : Path.Combine(projDir, sceneRelPath);
 
                     if (File.Exists(sceneAbsPath))
                     {
-                        string sceneJson = File.ReadAllText(sceneAbsPath);
-                        SceneDataDTO? sceneDto = JsonSerializer.Deserialize<SceneDataDTO>(sceneJson, jsonOptions);
-                        if (sceneDto != null)
+                        try
                         {
-                            loadedObjectsDTO = sceneDto.Objects;
+                            string sceneJson = File.ReadAllText(sceneAbsPath);
+                            SceneDataDTO? sceneDto = JsonSerializer.Deserialize<SceneDataDTO>(sceneJson, jsonOptions);
+                            if (sceneDto != null)
+                            {
+                                if (sceneDto.FormatVersion > 1)
+                                {
+                                    Log($"Предупреждение: Сцена имеет более новую версию формата (v{sceneDto.FormatVersion}).", LogType.Warning);
+                                }
+                                loadedObjectsDTO = sceneDto.Objects ?? new List<GameObjectDTO>();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"Ошибка при чтении файла сцены '{sceneAbsPath}': {ex.Message}", LogType.Error);
                         }
                     }
                     else
@@ -2386,7 +2402,11 @@ namespace _2DCore
                     SceneDataDTO? sceneDto = JsonSerializer.Deserialize<SceneDataDTO>(sceneJson, jsonOptions);
                     if (sceneDto != null)
                     {
-                        loadedObjectsDTO = sceneDto.Objects;
+                        if (sceneDto.FormatVersion > 1)
+                        {
+                            Log($"Предупреждение: Сцена имеет более новую версию формата (v{sceneDto.FormatVersion}).", LogType.Warning);
+                        }
+                        loadedObjectsDTO = sceneDto.Objects ?? new List<GameObjectDTO>();
                     }
                 }
 
@@ -2395,7 +2415,10 @@ namespace _2DCore
 
                 foreach (var dto in loadedObjectsDTO)
                 {
-                    newSceneObjects.Add(LoadObjectFromDTO(dto, projDir, loadedGuids));
+                    if (dto != null)
+                    {
+                        newSceneObjects.Add(LoadObjectFromDTO(dto, projDir, loadedGuids));
+                    }
                 }
 
                 if (!newSceneObjects.OfType<SoundService>().Any())
@@ -2510,77 +2533,86 @@ namespace _2DCore
             }
 
             obj.Id = validId;
-            obj.Name = dto.Name;
-            obj.ObjectType = dto.ObjectType;
+            obj.Name = dto.Name ?? "Object";
+            obj.ObjectType = dto.ObjectType ?? "Object";
 
-            foreach (var comp in dto.Components)
+            if (dto.Components != null)
             {
-                if (comp is TransformComponentDTO transformComp)
+                foreach (var comp in dto.Components)
                 {
-                    obj.Position = new Point(transformComp.X, transformComp.Y);
-                    obj.Size = new Size(transformComp.Width, transformComp.Height);
-                    obj.Transparency = transformComp.Transparency;
-                }
-                else if (comp is RenderComponentDTO renderComp)
-                {
-                    if (!string.IsNullOrEmpty(renderComp.ColorHex))
+                    if (comp is TransformComponentDTO transformComp)
                     {
-                        try
-                        {
-                            obj.Color = ColorTranslator.FromHtml(renderComp.ColorHex);
-                        }
-                        catch { }
+                        obj.Position = new Point(transformComp.X, transformComp.Y);
+                        obj.Size = new Size(transformComp.Width, transformComp.Height);
+                        obj.Transparency = transformComp.Transparency;
                     }
-
-                    if (!string.IsNullOrEmpty(renderComp.TexturePath))
+                    else if (comp is RenderComponentDTO renderComp)
                     {
-                        string absTexturePath = Path.IsPathRooted(renderComp.TexturePath)
-                            ? renderComp.TexturePath
-                            : Path.Combine(projectDir, renderComp.TexturePath);
-
-                        obj.TexturePath = renderComp.TexturePath;
-
-                        if (File.Exists(absTexturePath))
+                        if (!string.IsNullOrEmpty(renderComp.ColorHex))
                         {
                             try
                             {
-                                using (var img = Image.FromFile(absTexturePath))
+                                obj.Color = ColorTranslator.FromHtml(renderComp.ColorHex);
+                            }
+                            catch { }
+                        }
+
+                        if (!string.IsNullOrEmpty(renderComp.TexturePath))
+                        {
+                            string absTexturePath = Path.IsPathRooted(renderComp.TexturePath)
+                                ? renderComp.TexturePath
+                                : Path.Combine(projectDir, renderComp.TexturePath);
+
+                            obj.TexturePath = renderComp.TexturePath;
+
+                            if (File.Exists(absTexturePath))
+                            {
+                                try
                                 {
-                                    obj.Texture = new Bitmap(img);
+                                    using (var img = Image.FromFile(absTexturePath))
+                                    {
+                                        obj.Texture = new Bitmap(img);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log($"Предупреждение: Ошибка загрузки текстуры '{absTexturePath}' для '{obj.Name}': {ex.Message}", LogType.Warning);
                                 }
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                Log($"Предупреждение: Ошибка загрузки текстуры '{absTexturePath}' для '{obj.Name}': {ex.Message}", LogType.Warning);
+                                Log($"Предупреждение: Текстурный файл не найден: '{absTexturePath}' для '{obj.Name}'.", LogType.Warning);
                             }
                         }
-                        else
-                        {
-                            Log($"Предупреждение: Текстурный файл не найден: '{absTexturePath}' для '{obj.Name}'.", LogType.Warning);
-                        }
                     }
-                }
-                else if (comp is SoundComponentDTO soundComp && obj is SoundObject soundObj)
-                {
-                    soundObj.Volume = soundComp.Volume;
-                    if (!string.IsNullOrEmpty(soundComp.AudioFilePath))
+                    else if (comp is SoundComponentDTO soundComp && obj is SoundObject soundObj)
                     {
-                        string absAudioPath = Path.IsPathRooted(soundComp.AudioFilePath)
-                            ? soundComp.AudioFilePath
-                            : Path.Combine(projectDir, soundComp.AudioFilePath);
-
-                        soundObj.FilePath = absAudioPath;
-                        if (!File.Exists(absAudioPath))
+                        soundObj.Volume = soundComp.Volume;
+                        if (!string.IsNullOrEmpty(soundComp.AudioFilePath))
                         {
-                            Log($"Предупреждение: Аудиофайл не найден: '{absAudioPath}' для '{soundObj.Name}'.", LogType.Warning);
+                            string absAudioPath = Path.IsPathRooted(soundComp.AudioFilePath)
+                                ? soundComp.AudioFilePath
+                                : Path.Combine(projectDir, soundComp.AudioFilePath);
+
+                            soundObj.FilePath = absAudioPath;
+                            if (!File.Exists(absAudioPath))
+                            {
+                                Log($"Предупреждение: Аудиофайл не найден: '{absAudioPath}' для '{soundObj.Name}'.", LogType.Warning);
+                            }
                         }
                     }
                 }
             }
 
-            foreach (var childDto in dto.Children)
+            if (dto.Children != null)
             {
-                obj.Children.Add(LoadObjectFromDTO(childDto, projectDir, loadedGuids));
+                foreach (var childDto in dto.Children)
+                {
+                    if (childDto != null)
+                    {
+                        obj.Children.Add(LoadObjectFromDTO(childDto, projectDir, loadedGuids));
+                    }
+                }
             }
 
             return obj;
