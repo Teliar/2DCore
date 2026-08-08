@@ -448,7 +448,9 @@ namespace _2DCore
                 {
                     IntPtr hIcon = iconBmp.GetHicon();
                     this.Icon = Icon.FromHandle(hIcon);
-                    DestroyIcon(hIcon);
+                    this.FormClosed += (s, e) => {
+                        try { DestroyIcon(hIcon); } catch { }
+                    };
                 }
             }
             catch { }
