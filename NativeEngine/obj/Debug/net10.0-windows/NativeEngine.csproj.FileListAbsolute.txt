@@ -1,0 +1,14 @@
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\NativeEngine.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\NativeEngine.AssemblyInfoInputs.cache
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\NativeEngine.AssemblyInfo.cs
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\NativeEngine.csproj.CoreCompileInputs.cache
+C:\Users\vadim\Desktop\2D\NativeEngine\bin\Debug\net10.0-windows\NativeEngine.exe
+C:\Users\vadim\Desktop\2D\NativeEngine\bin\Debug\net10.0-windows\NativeEngine.deps.json
+C:\Users\vadim\Desktop\2D\NativeEngine\bin\Debug\net10.0-windows\NativeEngine.runtimeconfig.json
+C:\Users\vadim\Desktop\2D\NativeEngine\bin\Debug\net10.0-windows\NativeEngine.dll
+C:\Users\vadim\Desktop\2D\NativeEngine\bin\Debug\net10.0-windows\NativeEngine.pdb
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\NativeEngine.dll
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\refint\NativeEngine.dll
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\NativeEngine.pdb
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\NativeEngine.genruntimeconfig.cache
+C:\Users\vadim\Desktop\2D\NativeEngine\obj\Debug\net10.0-windows\ref\NativeEngine.dll
