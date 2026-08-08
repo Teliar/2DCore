@@ -1,4 +1,4 @@
-﻿namespace NativeEngine;
+namespace _2DCore;
 
 partial class Form1
 {

@@ -6,7 +6,7 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using System.Windows.Forms.Design;
 
-namespace NativeEngine
+namespace _2DCore
 {
     public class DarkDropdownColorEditor : UITypeEditor
     {

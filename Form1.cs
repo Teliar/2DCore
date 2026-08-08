@@ -7,38 +7,20 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows.Forms;
 using System.Windows.Forms.Design;
 
 namespace _2DCore
 {
-    // РЕДАКТОР ЦВЕТА ДЛЯ PROPERTYGRID
-    public class DarkDropdownColorEditor : UITypeEditor
-    {
-        public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext? context)
-        {
-            return UITypeEditorEditStyle.Modal;
-        }
-
-        public override object? EditValue(ITypeDescriptorContext? context, IServiceProvider? provider, object? value)
-        {
-            using (ColorDialog dlg = new ColorDialog())
-            {
-                if (value is System.Drawing.Color c)
-                {
-                    dlg.Color = c;
-                }
-                if (dlg.ShowDialog() == DialogResult.OK)
-                {
-                    return dlg.Color;
-                }
-            }
-            return value;
-        }
-    }
 
     public class GameObject : ICustomTypeDescriptor
     {
+        [Browsable(false)]
+        public Guid Id { get; set; } = Guid.NewGuid();
+
         [Category("General")]
         [DisplayName("Name")]
         public virtual string Name { get; set; } = "New Object";
@@ -71,6 +53,9 @@ namespace _2DCore
         [Editor(typeof(DarkDropdownColorEditor), typeof(UITypeEditor))]
         public System.Drawing.Color Color { get; set; } = System.Drawing.Color.White;
 
+        [Browsable(false)]
+        public string TexturePath { get; set; } = string.Empty;
+
         [Category("Appearance")]
         [DisplayName("Image")]
         [Description("Выберите изображение для объекта.")]
@@ -84,11 +69,13 @@ namespace _2DCore
         {
             return new GameObject
             {
+                Id = this.Id,
                 Name = this.Name,
                 Position = this.Position,
                 Size = this.Size,
                 transparency = this.transparency,
                 Color = this.Color,
+                TexturePath = this.TexturePath,
                 Texture = this.Texture != null ? new Bitmap(this.Texture) : null!,
                 ObjectType = this.ObjectType,
                 Children = this.Children.Select(c => c.Clone()).ToList()
@@ -147,6 +134,7 @@ namespace _2DCore
         {
             return new SoundService
             {
+                Id = this.Id,
                 Name = this.Name,
                 Position = this.Position,
                 Size = this.Size,
@@ -196,6 +184,7 @@ namespace _2DCore
         {
             return new SoundObject
             {
+                Id = this.Id,
                 Name = this.Name,
                 Position = this.Position,
                 Size = this.Size,
@@ -242,9 +231,132 @@ namespace _2DCore
         public override System.Drawing.Color ImageMarginGradientEnd => System.Drawing.Color.FromArgb(28, 29, 36);
     }
 
+    #region DTO Models for Serialization
+    public class ProjectDataDTO
+    {
+        [JsonPropertyName("formatVersion")]
+        public int FormatVersion { get; set; } = 1;
+
+        [JsonPropertyName("projectName")]
+        public string ProjectName { get; set; } = "New Project";
+
+        [JsonPropertyName("startScene")]
+        public string StartScene { get; set; } = "scenes/main.2dscene";
+
+        [JsonPropertyName("scenes")]
+        public List<string> Scenes { get; set; } = new List<string> { "scenes/main.2dscene" };
+
+        [JsonPropertyName("settings")]
+        public ProjectSettingsDTO Settings { get; set; } = new ProjectSettingsDTO();
+    }
+
+    public class ProjectSettingsDTO
+    {
+        [JsonPropertyName("viewportWidth")]
+        public int ViewportWidth { get; set; } = 1200;
+
+        [JsonPropertyName("viewportHeight")]
+        public int ViewportHeight { get; set; } = 780;
+
+        [JsonPropertyName("backgroundColorHex")]
+        public string BackgroundColorHex { get; set; } = "#121317";
+    }
+
+    public class SceneDataDTO
+    {
+        [JsonPropertyName("formatVersion")]
+        public int FormatVersion { get; set; } = 1;
+
+        [JsonPropertyName("sceneName")]
+        public string SceneName { get; set; } = "MainScene";
+
+        [JsonPropertyName("objects")]
+        public List<GameObjectDTO> Objects { get; set; } = new List<GameObjectDTO>();
+    }
+
+    public class GameObjectDTO
+    {
+        [JsonPropertyName("id")]
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        [JsonPropertyName("parentId")]
+        public Guid? ParentId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = "Object";
+
+        [JsonPropertyName("objectType")]
+        public string ObjectType { get; set; } = "Object";
+
+        [JsonPropertyName("components")]
+        public List<ComponentDTO> Components { get; set; } = new List<ComponentDTO>();
+
+        [JsonPropertyName("children")]
+        public List<GameObjectDTO> Children { get; set; } = new List<GameObjectDTO>();
+    }
+
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+    [JsonDerivedType(typeof(TransformComponentDTO), "Transform")]
+    [JsonDerivedType(typeof(RenderComponentDTO), "Render")]
+    [JsonDerivedType(typeof(SoundComponentDTO), "Sound")]
+    public abstract class ComponentDTO
+    {
+    }
+
+    public class TransformComponentDTO : ComponentDTO
+    {
+        [JsonPropertyName("x")]
+        public int X { get; set; }
+
+        [JsonPropertyName("y")]
+        public int Y { get; set; }
+
+        [JsonPropertyName("width")]
+        public int Width { get; set; } = 60;
+
+        [JsonPropertyName("height")]
+        public int Height { get; set; } = 60;
+
+        [JsonPropertyName("transparency")]
+        public float Transparency { get; set; } = 0.0f;
+    }
+
+    public class RenderComponentDTO : ComponentDTO
+    {
+        [JsonPropertyName("colorHex")]
+        public string ColorHex { get; set; } = "#FFFFFF";
+
+        [JsonPropertyName("texturePath")]
+        public string TexturePath { get; set; } = string.Empty;
+    }
+
+    public class SoundComponentDTO : ComponentDTO
+    {
+        [JsonPropertyName("audioFilePath")]
+        public string AudioFilePath { get; set; } = string.Empty;
+
+        [JsonPropertyName("volume")]
+        public double Volume { get; set; } = 1.0;
+    }
+    #endregion
+
     // Обязательное наследование : Form для устранения ошибки CS0115
     public partial class Form1 : Form
     {
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool DestroyIcon(IntPtr handle);
+
+        private static readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNameCaseInsensitive = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
+        private string? currentProjectPath = null;
+        private string currentProjectName = "New Project";
+        private bool isModified = false;
+
         private enum HandleType { None, TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left }
         public enum LogType { Info, Warning, Error }
 
@@ -318,6 +430,8 @@ namespace _2DCore
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
 
+            this.FormClosing += Form1_FormClosing;
+
             addIcon = LoadAddIcon();
             engineLogo = LoadCogIcon(); 
             terminalIcon = LoadTerminalIcon();
@@ -332,7 +446,9 @@ namespace _2DCore
             {
                 using (Bitmap iconBmp = new Bitmap(engineLogo))
                 {
-                    this.Icon = Icon.FromHandle(iconBmp.GetHicon());
+                    IntPtr hIcon = iconBmp.GetHicon();
+                    this.Icon = Icon.FromHandle(hIcon);
+                    DestroyIcon(hIcon);
                 }
             }
             catch { }
@@ -478,7 +594,7 @@ namespace _2DCore
             }
 
             RefreshExplorer();
-            UpdateTitle();
+            UpdateWindowTitle();
         }
 
         private string GetUniqueName(string baseName)
@@ -523,6 +639,7 @@ namespace _2DCore
             List<GameObject> snapshot = sceneObjects.Select(o => o.Clone()).ToList();
             undoStack.Push(snapshot);
             redoStack.Clear();
+            SetModified(true);
         }
 
         private void Undo()
@@ -572,6 +689,14 @@ namespace _2DCore
                 Renderer = new ToolStripProfessionalRenderer(new DarkColorTable())
             };
 
+            ToolStripMenuItem fileMenu = new ToolStripMenuItem("File") { ForeColor = System.Drawing.Color.White };
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("New Project", null, (s, e) => NewProjectCommand()) { ForeColor = System.Drawing.Color.White, ShortcutKeyDisplayString = "Ctrl+N" });
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("Open Project...", null, (s, e) => OpenProjectCommand()) { ForeColor = System.Drawing.Color.White, ShortcutKeyDisplayString = "Ctrl+O" });
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("Save Project", null, (s, e) => SaveProjectCommand()) { ForeColor = System.Drawing.Color.White, ShortcutKeyDisplayString = "Ctrl+S" });
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("Save Project As...", null, (s, e) => SaveProjectAsCommand()) { ForeColor = System.Drawing.Color.White, ShortcutKeyDisplayString = "Ctrl+Shift+S" });
+            fileMenu.DropDownItems.Add(new ToolStripSeparator());
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("Exit", null, (s, e) => Close()) { ForeColor = System.Drawing.Color.White });
+
             ToolStripMenuItem editMenu = new ToolStripMenuItem("Edit") { ForeColor = System.Drawing.Color.White };
             
             editMenu.DropDownItems.Add(new ToolStripMenuItem("Undo", null, (s, e) => Undo()) { ForeColor = System.Drawing.Color.White, ShortcutKeyDisplayString = "Ctrl+Z" });
@@ -585,6 +710,7 @@ namespace _2DCore
             ToolStripMenuItem viewMenu = new ToolStripMenuItem("View") { ForeColor = System.Drawing.Color.White };
             viewMenu.DropDownItems.Add(new ToolStripMenuItem("Toggle Output Panel", null, (s, e) => ToggleOutputPanel()) { ForeColor = System.Drawing.Color.White, ShortcutKeyDisplayString = "Ctrl+~" });
 
+            mainMenu.Items.Add(fileMenu);
             mainMenu.Items.Add(editMenu);
             mainMenu.Items.Add(viewMenu);
 
@@ -771,6 +897,8 @@ namespace _2DCore
             foreach (var item in clipboardObjects)
             {
                 GameObject copy = item.Clone();
+                AssignNewGuids(copy);
+
                 string cleanBase = item.Name;
                 int underscoreIdx = cleanBase.LastIndexOf('_');
                 if (underscoreIdx > 0 && int.TryParse(cleanBase.Substring(underscoreIdx + 1), out _))
@@ -801,6 +929,8 @@ namespace _2DCore
                 if (original is SoundService) continue;
 
                 GameObject clone = original.Clone();
+                AssignNewGuids(clone);
+
                 string cleanBase = original.Name;
                 int underscoreIdx = cleanBase.LastIndexOf('_');
                 if (underscoreIdx > 0 && int.TryParse(cleanBase.Substring(underscoreIdx + 1), out _))
@@ -833,6 +963,30 @@ namespace _2DCore
                     e.Handled = true;
                     e.SuppressKeyPress = true;
                 }
+            }
+            else if (e.Control && e.Shift && e.KeyCode == Keys.S)
+            {
+                SaveProjectAsCommand();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.S)
+            {
+                SaveProjectCommand();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.O)
+            {
+                OpenProjectCommand();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.N)
+            {
+                NewProjectCommand();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
             }
             else if (e.Control && e.Shift && e.KeyCode == Keys.Z)
             {
@@ -1961,6 +2115,513 @@ namespace _2DCore
                 }
             }
         }
+
+        #region Project & File Management Systems
+        private void SetModified(bool modified)
+        {
+            isModified = modified;
+            UpdateWindowTitle();
+        }
+
+        private void UpdateWindowTitle()
+        {
+            string fileName = !string.IsNullOrEmpty(currentProjectPath) 
+                ? Path.GetFileName(currentProjectPath) 
+                : currentProjectName;
+            this.Text = $"2DCore Engine - {fileName}{(isModified ? " *" : "")}";
+        }
+
+        private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            if (!PromptSaveIfModified())
+            {
+                e.Cancel = true;
+            }
+        }
+
+        private bool PromptSaveIfModified()
+        {
+            if (!isModified) return true;
+
+            DialogResult result = MessageBox.Show(
+                "Проект содержит несохранённые изменения. Сохранить их перед продолжением?",
+                "Несохранённые изменения",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+            {
+                return SaveProjectCommand();
+            }
+            else if (result == DialogResult.No)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool NewProjectCommand()
+        {
+            if (!PromptSaveIfModified()) return false;
+
+            sceneObjects.Clear();
+            selectedObjects.Clear();
+            undoStack.Clear();
+            redoStack.Clear();
+
+            sceneObjects.Add(new SoundService());
+
+            currentProjectPath = null;
+            currentProjectName = "New Project";
+            SetModified(false);
+
+            RefreshExplorer();
+            UpdatePropertyGrid();
+            viewportPanel.Invalidate();
+
+            Log("Создан новый проект.", LogType.Info);
+            return true;
+        }
+
+        private bool OpenProjectCommand()
+        {
+            if (!PromptSaveIfModified()) return false;
+
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "2D Engine Files (*.2dproj;*.2dscene)|*.2dproj;*.2dscene|2D Project (*.2dproj)|*.2dproj|2D Scene (*.2dscene)|*.2dscene";
+                ofd.Title = "Открыть проект или сцену";
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    return PerformOpenProject(ofd.FileName);
+                }
+            }
+            return false;
+        }
+
+        private bool SaveProjectCommand()
+        {
+            if (string.IsNullOrEmpty(currentProjectPath))
+            {
+                return SaveProjectAsCommand();
+            }
+            return PerformSaveProject(currentProjectPath);
+        }
+
+        private bool SaveProjectAsCommand()
+        {
+            using (SaveFileDialog sfd = new SaveFileDialog())
+            {
+                sfd.Filter = "2D Engine Project (*.2dproj)|*.2dproj|2D Engine Scene (*.2dscene)|*.2dscene";
+                sfd.Title = "Сохранить проект как...";
+                sfd.FileName = currentProjectName;
+                if (sfd.ShowDialog() == DialogResult.OK)
+                {
+                    return PerformSaveProject(sfd.FileName);
+                }
+            }
+            return false;
+        }
+
+        private bool SafeWriteText(string filePath, string content)
+        {
+            string tempFilePath = filePath + ".tmp";
+            try
+            {
+                string dir = Path.GetDirectoryName(filePath) ?? string.Empty;
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                File.WriteAllText(tempFilePath, content);
+
+                if (File.Exists(filePath))
+                {
+                    File.Replace(tempFilePath, filePath, null);
+                }
+                else
+                {
+                    File.Move(tempFilePath, filePath);
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка записи файла '{filePath}': {ex.Message}", LogType.Error);
+                try
+                {
+                    if (File.Exists(tempFilePath))
+                    {
+                        File.Delete(tempFilePath);
+                    }
+                }
+                catch { }
+                return false;
+            }
+        }
+
+        private bool PerformSaveProject(string filePath)
+        {
+            try
+            {
+                string projDir = Path.GetDirectoryName(filePath) ?? string.Empty;
+                string ext = Path.GetExtension(filePath).ToLower();
+
+                if (ext == ".2dproj")
+                {
+                    string scenesRelDir = "scenes";
+                    string scenesAbsDir = Path.Combine(projDir, scenesRelDir);
+                    if (!Directory.Exists(scenesAbsDir))
+                    {
+                        Directory.CreateDirectory(scenesAbsDir);
+                    }
+
+                    string sceneRelFile = Path.Combine(scenesRelDir, "main.2dscene").Replace('\\', '/');
+                    string sceneAbsFile = Path.Combine(projDir, "scenes", "main.2dscene");
+
+                    SceneDataDTO sceneDto = new SceneDataDTO
+                    {
+                        FormatVersion = 1,
+                        SceneName = "MainScene",
+                        Objects = sceneObjects.Select(o => ConvertToDTO(o, null, projDir)).ToList()
+                    };
+
+                    string sceneJson = JsonSerializer.Serialize(sceneDto, jsonOptions);
+                    if (!SafeWriteText(sceneAbsFile, sceneJson))
+                    {
+                        return false;
+                    }
+
+                    ProjectDataDTO projDto = new ProjectDataDTO
+                    {
+                        FormatVersion = 1,
+                        ProjectName = Path.GetFileNameWithoutExtension(filePath),
+                        StartScene = sceneRelFile,
+                        Scenes = new List<string> { sceneRelFile },
+                        Settings = new ProjectSettingsDTO
+                        {
+                            ViewportWidth = viewportPanel.Width,
+                            ViewportHeight = viewportPanel.Height,
+                            BackgroundColorHex = ColorTranslator.ToHtml(bgDark)
+                        }
+                    };
+
+                    string projJson = JsonSerializer.Serialize(projDto, jsonOptions);
+                    if (!SafeWriteText(filePath, projJson))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    SceneDataDTO sceneDto = new SceneDataDTO
+                    {
+                        FormatVersion = 1,
+                        SceneName = Path.GetFileNameWithoutExtension(filePath),
+                        Objects = sceneObjects.Select(o => ConvertToDTO(o, null, projDir)).ToList()
+                    };
+
+                    string sceneJson = JsonSerializer.Serialize(sceneDto, jsonOptions);
+                    if (!SafeWriteText(filePath, sceneJson))
+                    {
+                        return false;
+                    }
+                }
+
+                currentProjectPath = filePath;
+                currentProjectName = Path.GetFileNameWithoutExtension(filePath);
+                SetModified(false);
+                Log($"Успешно сохранено: '{filePath}'", LogType.Info);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"Сбой при сохранении проекта: {ex.Message}", LogType.Error);
+                return false;
+            }
+        }
+
+        private bool PerformOpenProject(string filePath)
+        {
+            try
+            {
+                string projDir = Path.GetDirectoryName(filePath) ?? string.Empty;
+                string ext = Path.GetExtension(filePath).ToLower();
+
+                List<GameObjectDTO> loadedObjectsDTO = new List<GameObjectDTO>();
+
+                if (ext == ".2dproj")
+                {
+                    string projJson = File.ReadAllText(filePath);
+                    ProjectDataDTO? projDto = JsonSerializer.Deserialize<ProjectDataDTO>(projJson, jsonOptions);
+
+                    if (projDto == null)
+                    {
+                        Log($"Не удалось прочитать файл проекта '{filePath}'.", LogType.Error);
+                        return false;
+                    }
+
+                    string sceneRelPath = projDto.StartScene;
+                    string sceneAbsPath = Path.IsPathRooted(sceneRelPath) ? sceneRelPath : Path.Combine(projDir, sceneRelPath);
+
+                    if (File.Exists(sceneAbsPath))
+                    {
+                        string sceneJson = File.ReadAllText(sceneAbsPath);
+                        SceneDataDTO? sceneDto = JsonSerializer.Deserialize<SceneDataDTO>(sceneJson, jsonOptions);
+                        if (sceneDto != null)
+                        {
+                            loadedObjectsDTO = sceneDto.Objects;
+                        }
+                    }
+                    else
+                    {
+                        Log($"Файл стартовой сцены не найден: '{sceneAbsPath}'.", LogType.Warning);
+                    }
+                }
+                else
+                {
+                    string sceneJson = File.ReadAllText(filePath);
+                    SceneDataDTO? sceneDto = JsonSerializer.Deserialize<SceneDataDTO>(sceneJson, jsonOptions);
+                    if (sceneDto != null)
+                    {
+                        loadedObjectsDTO = sceneDto.Objects;
+                    }
+                }
+
+                HashSet<Guid> loadedGuids = new HashSet<Guid>();
+                List<GameObject> newSceneObjects = new List<GameObject>();
+
+                foreach (var dto in loadedObjectsDTO)
+                {
+                    newSceneObjects.Add(LoadObjectFromDTO(dto, projDir, loadedGuids));
+                }
+
+                if (!newSceneObjects.OfType<SoundService>().Any())
+                {
+                    newSceneObjects.Add(new SoundService());
+                }
+
+                sceneObjects = newSceneObjects;
+                selectedObjects.Clear();
+                undoStack.Clear();
+                redoStack.Clear();
+
+                currentProjectPath = filePath;
+                currentProjectName = Path.GetFileNameWithoutExtension(filePath);
+                SetModified(false);
+
+                RefreshExplorer();
+                UpdatePropertyGrid();
+                viewportPanel.Invalidate();
+
+                Log($"Проект успешно загружен: '{filePath}'", LogType.Info);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка при загрузке файла: {ex.Message}", LogType.Error);
+                return false;
+            }
+        }
+
+        private GameObjectDTO ConvertToDTO(GameObject obj, Guid? parentId, string projectDir)
+        {
+            var dto = new GameObjectDTO
+            {
+                Id = obj.Id,
+                ParentId = parentId,
+                Name = obj.Name,
+                ObjectType = obj.ObjectType,
+                Components = new List<ComponentDTO>()
+            };
+
+            // Transform Component
+            dto.Components.Add(new TransformComponentDTO
+            {
+                X = obj.Position.X,
+                Y = obj.Position.Y,
+                Width = obj.Size.Width,
+                Height = obj.Size.Height,
+                Transparency = obj.Transparency
+            });
+
+            // Render Component
+            string relTexturePath = string.Empty;
+            if (!string.IsNullOrEmpty(obj.TexturePath))
+            {
+                relTexturePath = GetRelativePath(obj.TexturePath, projectDir);
+            }
+
+            dto.Components.Add(new RenderComponentDTO
+            {
+                ColorHex = ColorTranslator.ToHtml(obj.Color),
+                TexturePath = relTexturePath
+            });
+
+            // Sound Component
+            if (obj is SoundObject soundObj)
+            {
+                string relAudioPath = string.Empty;
+                if (!string.IsNullOrEmpty(soundObj.FilePath))
+                {
+                    relAudioPath = GetRelativePath(soundObj.FilePath, projectDir);
+                }
+
+                dto.Components.Add(new SoundComponentDTO
+                {
+                    AudioFilePath = relAudioPath,
+                    Volume = soundObj.Volume
+                });
+            }
+
+            // Children recursion
+            foreach (var child in obj.Children)
+            {
+                dto.Children.Add(ConvertToDTO(child, obj.Id, projectDir));
+            }
+
+            return dto;
+        }
+
+        private GameObject LoadObjectFromDTO(GameObjectDTO dto, string projectDir, HashSet<Guid> loadedGuids)
+        {
+            Guid validId = dto.Id;
+            if (validId == Guid.Empty || loadedGuids.Contains(validId))
+            {
+                validId = Guid.NewGuid();
+                Log($"Предупреждение: Обнаружен дубликат/пустой GUID для '{dto.Name}'. Сгенерирован новый GUID: {validId}", LogType.Warning);
+            }
+            loadedGuids.Add(validId);
+
+            GameObject obj;
+            if (dto.ObjectType == "SoundService")
+            {
+                obj = new SoundService();
+            }
+            else if (dto.ObjectType == "SoundTrigger" || dto.ObjectType == "Sound")
+            {
+                obj = new SoundObject();
+            }
+            else
+            {
+                obj = new GameObject();
+            }
+
+            obj.Id = validId;
+            obj.Name = dto.Name;
+            obj.ObjectType = dto.ObjectType;
+
+            foreach (var comp in dto.Components)
+            {
+                if (comp is TransformComponentDTO transformComp)
+                {
+                    obj.Position = new Point(transformComp.X, transformComp.Y);
+                    obj.Size = new Size(transformComp.Width, transformComp.Height);
+                    obj.Transparency = transformComp.Transparency;
+                }
+                else if (comp is RenderComponentDTO renderComp)
+                {
+                    if (!string.IsNullOrEmpty(renderComp.ColorHex))
+                    {
+                        try
+                        {
+                            obj.Color = ColorTranslator.FromHtml(renderComp.ColorHex);
+                        }
+                        catch { }
+                    }
+
+                    if (!string.IsNullOrEmpty(renderComp.TexturePath))
+                    {
+                        string absTexturePath = Path.IsPathRooted(renderComp.TexturePath)
+                            ? renderComp.TexturePath
+                            : Path.Combine(projectDir, renderComp.TexturePath);
+
+                        obj.TexturePath = renderComp.TexturePath;
+
+                        if (File.Exists(absTexturePath))
+                        {
+                            try
+                            {
+                                using (var img = Image.FromFile(absTexturePath))
+                                {
+                                    obj.Texture = new Bitmap(img);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"Предупреждение: Ошибка загрузки текстуры '{absTexturePath}' для '{obj.Name}': {ex.Message}", LogType.Warning);
+                            }
+                        }
+                        else
+                        {
+                            Log($"Предупреждение: Текстурный файл не найден: '{absTexturePath}' для '{obj.Name}'.", LogType.Warning);
+                        }
+                    }
+                }
+                else if (comp is SoundComponentDTO soundComp && obj is SoundObject soundObj)
+                {
+                    soundObj.Volume = soundComp.Volume;
+                    if (!string.IsNullOrEmpty(soundComp.AudioFilePath))
+                    {
+                        string absAudioPath = Path.IsPathRooted(soundComp.AudioFilePath)
+                            ? soundComp.AudioFilePath
+                            : Path.Combine(projectDir, soundComp.AudioFilePath);
+
+                        soundObj.FilePath = absAudioPath;
+                        if (!File.Exists(absAudioPath))
+                        {
+                            Log($"Предупреждение: Аудиофайл не найден: '{absAudioPath}' для '{soundObj.Name}'.", LogType.Warning);
+                        }
+                    }
+                }
+            }
+
+            foreach (var childDto in dto.Children)
+            {
+                obj.Children.Add(LoadObjectFromDTO(childDto, projectDir, loadedGuids));
+            }
+
+            return obj;
+        }
+
+        private string GetRelativePath(string fullPath, string basePath)
+        {
+            if (string.IsNullOrEmpty(fullPath) || string.IsNullOrEmpty(basePath))
+                return fullPath;
+
+            try
+            {
+                string baseDir = basePath;
+                if (!baseDir.EndsWith(Path.DirectorySeparatorChar.ToString()) && !baseDir.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+                {
+                    baseDir += Path.DirectorySeparatorChar;
+                }
+
+                Uri baseUri = new Uri(baseDir);
+                Uri fullUri = new Uri(fullPath);
+                if (baseUri.Scheme != fullUri.Scheme) return fullPath;
+
+                Uri relativeUri = baseUri.MakeRelativeUri(fullUri);
+                string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
+                return relativePath.Replace('/', Path.DirectorySeparatorChar);
+            }
+            catch
+            {
+                return fullPath;
+            }
+        }
+
+        private void AssignNewGuids(GameObject obj)
+        {
+            obj.Id = Guid.NewGuid();
+            foreach (var child in obj.Children)
+            {
+                AssignNewGuids(child);
+            }
+        }
+        #endregion
 
         private void DrawGridAndAxes(Graphics g)
         {
