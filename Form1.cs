@@ -86,11 +86,11 @@ namespace _2DCore
 
         #region ICustomTypeDescriptor
         public AttributeCollection GetAttributes() => TypeDescriptor.GetAttributes(this, true);
-        public string GetClassName() => TypeDescriptor.GetClassName(this, true);
-        public string GetComponentName() => TypeDescriptor.GetComponentName(this, true);
+        public string? GetClassName() => TypeDescriptor.GetClassName(this, true);
+        public string? GetComponentName() => TypeDescriptor.GetComponentName(this, true);
         public TypeConverter GetConverter() => TypeDescriptor.GetConverter(this, true);
-        public EventDescriptor GetDefaultEvent() => TypeDescriptor.GetDefaultEvent(this, true);
-        public PropertyDescriptor GetDefaultProperty() => TypeDescriptor.GetDefaultProperty(this, true);
+        public EventDescriptor? GetDefaultEvent() => TypeDescriptor.GetDefaultEvent(this, true);
+        public PropertyDescriptor? GetDefaultProperty() => TypeDescriptor.GetDefaultProperty(this, true);
         public object GetEditor(Type editorBaseType) => TypeDescriptor.GetEditor(this, editorBaseType, true)!;
         public EventDescriptorCollection GetEvents() => TypeDescriptor.GetEvents(this, true);
         public EventDescriptorCollection GetEvents(Attribute[]? attributes) => TypeDescriptor.GetEvents(this, attributes, true);
@@ -366,23 +366,23 @@ namespace _2DCore
         private readonly System.Drawing.Color accentBlue = System.Drawing.Color.FromArgb(52, 120, 246);
         private readonly System.Drawing.Color textColor = System.Drawing.Color.FromArgb(220, 222, 230);
 
-        private TreeView explorerTree;
-        private ImageList explorerImageList;
-        private PropertyGrid propertiesGrid;
-        private Panel viewportPanel;
+        private TreeView explorerTree = null!;
+        private ImageList explorerImageList = null!;
+        private PropertyGrid propertiesGrid = null!;
+        private Panel viewportPanel = null!;
         
-        private SplitContainer outerSplit;
-        private RichTextBox outputTextBox;
+        private SplitContainer outerSplit = null!;
+        private RichTextBox outputTextBox = null!;
 
-        private Image addIcon;
-        private Image engineLogo;
-        private Image terminalIcon;
-        private Image shapeHandlesIcon;
-        private Image folderIcon;
-        private Image folderPageIcon;
-        private Image soundServiceIcon;
-        private Image soundIcon;
-        private Image soundTriggerIcon;
+        private Image addIcon = null!;
+        private Image engineLogo = null!;
+        private Image terminalIcon = null!;
+        private Image shapeHandlesIcon = null!;
+        private Image folderIcon = null!;
+        private Image folderPageIcon = null!;
+        private Image soundServiceIcon = null!;
+        private Image soundIcon = null!;
+        private Image soundTriggerIcon = null!;
 
         private List<GameObject> sceneObjects = new List<GameObject>();
         private List<GameObject> selectedObjects = new List<GameObject>();
@@ -518,7 +518,7 @@ namespace _2DCore
 
             propertiesGrid.PropertyValueChanged += (object? s, PropertyValueChangedEventArgs e) => {
                 RefreshExplorer();
-                viewportPanel.Invalidate();
+                viewportPanel?.Invalidate();
             };
 
             propContainer.Controls.Add(propertiesGrid);
