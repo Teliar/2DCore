@@ -8,11 +8,11 @@
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Ignore a stale pre-migration source tree left by older checkouts. -->
-    <Compile Remove="NativeEngine\**\*.cs" />
+    <Compile Include="*.cs" />
 
     <Content Include="EditorAssets\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

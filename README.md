@@ -1,4 +1,4 @@
-# 🎮 2DCore (NativeEngine)
+# 🎮 2DCore
 
 **2DCore** — современный 2D-игровой движок и редактор сцен на платформах C# и .NET 10.0 с графическим интерфейсом в стиле Unity / Unreal Engine / Roblox Studio.
 
@@ -34,7 +34,7 @@ dotnet build
 ```
 
 ### 3. Запуск через Visual Studio
-1. Откройте файл проекта `NativeEngine.csproj` в Visual Studio.
+1. Откройте файл проекта `2DCore.csproj` в Visual Studio.
 2. Выберите конфигурацию `Debug` или `Release` и целевую платформу `net10.0-windows`.
 3. Нажмите **F5** (для запуска с отладкой) или **Ctrl+F5** (без отладки).
 
@@ -49,7 +49,7 @@ dotnet build
 ├── CustomColorPicker.cs         # Кастомный HSV-пикер цвета для PropertyGrid
 ├── Form1.cs                    # Основной код GUI редактора (вьюпорт, сцены, Undo/Redo)
 ├── Form1.Designer.cs           # Дизайнер компонентов формы
-├── NativeEngine.csproj         # Файл конфигурации сборки .NET 10
+├── 2DCore.csproj               # Файл конфигурации сборки .NET 10
 └── Program.cs                  # Главная точка входа в приложение
 ```
 

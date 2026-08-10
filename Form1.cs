@@ -231,6 +231,29 @@ namespace _2DCore
         public override System.Drawing.Color ImageMarginGradientEnd => System.Drawing.Color.FromArgb(28, 29, 36);
     }
 
+    public sealed class DoubleBufferedTreeView : TreeView
+    {
+        private const int TV_FIRST = 0x1100;
+        private const int TVM_SETEXTENDEDSTYLE = TV_FIRST + 44;
+        private const int TVS_EX_DOUBLEBUFFER = 0x0004;
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        public DoubleBufferedTreeView()
+        {
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+            DoubleBuffered = true;
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            SendMessage(Handle, TVM_SETEXTENDEDSTYLE,
+                (IntPtr)TVS_EX_DOUBLEBUFFER, (IntPtr)TVS_EX_DOUBLEBUFFER);
+        }
+    }
+
     #region DTO Models for Serialization
     public class ProjectDataDTO
     {
@@ -418,6 +441,7 @@ namespace _2DCore
 
         private const float HandleSize = 8f;
         private TreeNode? hoveredNode = null;
+        private TreeNode? dragTargetNode = null;
         private GameObject? targetParentGameObject = null;
 
         public Form1()
@@ -550,7 +574,7 @@ namespace _2DCore
             Panel explorerContainer = new Panel { Dock = DockStyle.Fill, BackColor = bgPanel };
             explorerContainer.Controls.Add(CreateHeaderPanel("Scene Hierarchy"));
 
-            explorerTree = new TreeView 
+            explorerTree = new DoubleBufferedTreeView
             { 
                 Dock = DockStyle.Fill, 
                 ImageList = explorerImageList,
@@ -572,6 +596,7 @@ namespace _2DCore
             explorerTree.ItemDrag += ExplorerTree_ItemDrag;
             explorerTree.DragEnter += ExplorerTree_DragEnter;
             explorerTree.DragOver += ExplorerTree_DragOver;
+            explorerTree.DragLeave += ExplorerTree_DragLeave;
             explorerTree.DragDrop += ExplorerTree_DragDrop;
 
             explorerContainer.Controls.Add(explorerTree);
@@ -1325,12 +1350,15 @@ namespace _2DCore
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
             bool isSelected = (e.State & TreeNodeStates.Selected) != 0;
-            System.Drawing.Color bgColor = isSelected ? accentBlue : explorerTree.BackColor;
+            bool isDropTarget = e.Node == dragTargetNode;
+            System.Drawing.Color bgColor = isSelected
+                ? accentBlue
+                : isDropTarget ? System.Drawing.Color.FromArgb(42, 65, 105) : explorerTree.BackColor;
             System.Drawing.Color fontColor = isSelected ? System.Drawing.Color.White : textColor;
 
             using (Brush bgBrush = new SolidBrush(bgColor))
             {
-                g.FillRectangle(bgBrush, e.Bounds);
+                g.FillRectangle(bgBrush, new Rectangle(0, e.Bounds.Top, explorerTree.ClientSize.Width, e.Bounds.Height));
             }
 
             if (e.Node.Parent == null)
@@ -1448,8 +1476,10 @@ namespace _2DCore
             TreeNode? node = explorerTree.GetNodeAt(e.Location);
             if (hoveredNode != node)
             {
+                TreeNode? previousNode = hoveredNode;
                 hoveredNode = node;
-                explorerTree.Invalidate();
+                InvalidateExplorerNode(previousNode);
+                InvalidateExplorerNode(hoveredNode);
             }
         }
 
@@ -1457,9 +1487,16 @@ namespace _2DCore
         {
             if (hoveredNode != null)
             {
+                TreeNode previousNode = hoveredNode;
                 hoveredNode = null;
-                explorerTree.Invalidate();
+                InvalidateExplorerNode(previousNode);
             }
+        }
+
+        private void InvalidateExplorerNode(TreeNode? node)
+        {
+            if (node == null || node.TreeView == null) return;
+            explorerTree.Invalidate(new Rectangle(0, node.Bounds.Top, explorerTree.ClientSize.Width, node.Bounds.Height));
         }
 
         private ContextMenuStrip CreateAddContextMenu(GameObject? parent)
@@ -1540,20 +1577,36 @@ namespace _2DCore
 
         private void ExplorerTree_DragEnter(object? sender, DragEventArgs e)
         {
-            if (e.Data != null && e.Data.GetDataPresent(typeof(TreeNode)))
-                e.Effect = DragDropEffects.Move;
-            else
-                e.Effect = DragDropEffects.None;
+            e.Effect = e.Data?.GetDataPresent(typeof(TreeNode)) == true
+                ? DragDropEffects.Move
+                : DragDropEffects.None;
         }
 
         private void ExplorerTree_DragOver(object? sender, DragEventArgs e)
         {
             Point targetPoint = explorerTree.PointToClient(new Point(e.X, e.Y));
             TreeNode? targetNode = explorerTree.GetNodeAt(targetPoint);
-            if (targetNode != null)
+            TreeNode? draggedNode = e.Data?.GetData(typeof(TreeNode)) as TreeNode;
+            GameObject? draggedObj = draggedNode?.Tag as GameObject;
+
+            bool canDrop = draggedObj != null && CanDropObject(draggedObj, targetNode);
+            e.Effect = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+
+            TreeNode? nextTarget = canDrop ? targetNode : null;
+            if (dragTargetNode != nextTarget)
             {
-                explorerTree.SelectedNode = targetNode;
+                TreeNode? previousTarget = dragTargetNode;
+                dragTargetNode = nextTarget;
+                InvalidateExplorerNode(previousTarget);
+                InvalidateExplorerNode(dragTargetNode);
             }
+        }
+
+        private void ExplorerTree_DragLeave(object? sender, EventArgs e)
+        {
+            TreeNode? previousTarget = dragTargetNode;
+            dragTargetNode = null;
+            InvalidateExplorerNode(previousTarget);
         }
 
         private void ExplorerTree_DragDrop(object? sender, DragEventArgs e)
@@ -1562,10 +1615,12 @@ namespace _2DCore
             TreeNode? targetNode = explorerTree.GetNodeAt(targetPoint);
             TreeNode? draggedNode = e.Data?.GetData(typeof(TreeNode)) as TreeNode;
 
-            if (draggedNode != null && draggedNode.Tag is GameObject draggedObj)
-            {
-                if (draggedObj is SoundService) return;
+            TreeNode? previousTarget = dragTargetNode;
+            dragTargetNode = null;
+            InvalidateExplorerNode(previousTarget);
 
+            if (draggedNode != null && draggedNode.Tag is GameObject draggedObj && CanDropObject(draggedObj, targetNode))
+            {
                 SaveStateForUndo();
                 RemoveObjectFromHierarchy(draggedObj);
 
@@ -1589,16 +1644,47 @@ namespace _2DCore
                 }
                 else if (targetNode.Tag is GameObject targetObj)
                 {
-                    if (IsDescendant(draggedObj, targetObj))
-                    {
-                        RefreshExplorer();
-                        return;
-                    }
                     targetObj.Children.Add(draggedObj);
                 }
 
-                RefreshExplorer();
+                selectedObjects.Clear();
+                selectedObjects.Add(draggedObj);
+                Guid? expandedTargetId = targetNode?.Tag is GameObject target ? target.Id : null;
+                RefreshExplorer(draggedObj.Id, expandedTargetId);
+                UpdatePropertyGrid();
             }
+        }
+
+        private bool CanDropObject(GameObject draggedObj, TreeNode? targetNode)
+        {
+            if (draggedObj is SoundService) return false;
+
+            GameObject? targetObj = targetNode?.Tag as GameObject;
+            if (targetObj != null && IsDescendant(draggedObj, targetObj)) return false;
+
+            GameObject? currentParent = FindParentObject(draggedObj);
+            return currentParent != targetObj;
+        }
+
+        private GameObject? FindParentObject(GameObject target)
+        {
+            foreach (GameObject root in sceneObjects)
+            {
+                GameObject? parent = FindParentObjectRecursive(root, target);
+                if (parent != null) return parent;
+            }
+            return null;
+        }
+
+        private GameObject? FindParentObjectRecursive(GameObject parent, GameObject target)
+        {
+            if (parent.Children.Contains(target)) return parent;
+            foreach (GameObject child in parent.Children)
+            {
+                GameObject? found = FindParentObjectRecursive(child, target);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         private bool IsDescendant(GameObject parent, GameObject potentialDescendant)
@@ -1680,44 +1766,90 @@ namespace _2DCore
             targetParentGameObject = null;
         }
 
-        private void RefreshExplorer()
+        private void RefreshExplorer(Guid? selectedId = null, Guid? expandedId = null)
         {
-            explorerTree.Nodes.Clear();
-
-            TreeNode sceneNode = new TreeNode("Scene")
+            HashSet<Guid> expandedObjectIds = new HashSet<Guid>();
+            foreach (TreeNode root in explorerTree.Nodes)
             {
-                ImageIndex = 0,
-                SelectedImageIndex = 0,
-                Tag = null
-            };
-
-            foreach (var obj in sceneObjects.Where(o => !(o is SoundService)))
-            {
-                sceneNode.Nodes.Add(CreateTreeNodeRecursive(obj));
+                CollectExpandedObjectIds(root, expandedObjectIds);
             }
+            if (expandedId.HasValue) expandedObjectIds.Add(expandedId.Value);
+            selectedId ??= selectedObjects.FirstOrDefault()?.Id;
 
-            explorerTree.Nodes.Add(sceneNode);
-            sceneNode.Expand();
-
-            foreach (var soundSvc in sceneObjects.OfType<SoundService>())
+            explorerTree.BeginUpdate();
+            try
             {
-                TreeNode serviceNode = new TreeNode(soundSvc.Name)
+                explorerTree.Nodes.Clear();
+
+                TreeNode sceneNode = new TreeNode("Scene")
                 {
-                    Tag = soundSvc,
-                    ImageIndex = 5,
-                    SelectedImageIndex = 5
+                    ImageIndex = 0,
+                    SelectedImageIndex = 0,
+                    Tag = null
                 };
 
-                foreach (var child in soundSvc.Children)
+                foreach (var obj in sceneObjects.Where(o => !(o is SoundService)))
                 {
-                    serviceNode.Nodes.Add(CreateTreeNodeRecursive(child));
+                    sceneNode.Nodes.Add(CreateTreeNodeRecursive(obj));
                 }
 
-                explorerTree.Nodes.Add(serviceNode);
-                serviceNode.Expand();
+                explorerTree.Nodes.Add(sceneNode);
+                sceneNode.Expand();
+
+                foreach (var soundSvc in sceneObjects.OfType<SoundService>())
+                {
+                    TreeNode serviceNode = new TreeNode(soundSvc.Name)
+                    {
+                        Tag = soundSvc,
+                        ImageIndex = 5,
+                        SelectedImageIndex = 5
+                    };
+
+                    foreach (var child in soundSvc.Children)
+                    {
+                        serviceNode.Nodes.Add(CreateTreeNodeRecursive(child));
+                    }
+
+                    explorerTree.Nodes.Add(serviceNode);
+                    serviceNode.Expand();
+                }
+
+                foreach (TreeNode root in explorerTree.Nodes)
+                {
+                    RestoreExplorerState(root, expandedObjectIds, selectedId);
+                }
+            }
+            finally
+            {
+                explorerTree.EndUpdate();
             }
 
             viewportPanel.Invalidate();
+        }
+
+        private void CollectExpandedObjectIds(TreeNode node, HashSet<Guid> expandedObjectIds)
+        {
+            if (node.IsExpanded && node.Tag is GameObject obj)
+            {
+                expandedObjectIds.Add(obj.Id);
+            }
+            foreach (TreeNode child in node.Nodes)
+            {
+                CollectExpandedObjectIds(child, expandedObjectIds);
+            }
+        }
+
+        private void RestoreExplorerState(TreeNode node, HashSet<Guid> expandedObjectIds, Guid? selectedId)
+        {
+            if (node.Tag is GameObject obj)
+            {
+                if (expandedObjectIds.Contains(obj.Id)) node.Expand();
+                if (selectedId == obj.Id) explorerTree.SelectedNode = node;
+            }
+            foreach (TreeNode child in node.Nodes)
+            {
+                RestoreExplorerState(child, expandedObjectIds, selectedId);
+            }
         }
 
         private TreeNode CreateTreeNodeRecursive(GameObject obj)
