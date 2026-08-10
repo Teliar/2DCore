@@ -1,22 +1,30 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework Condition="'$(NETCoreSdkVersion)' &lt; '10.0'">net9.0-windows</TargetFramework>
-    <TargetFramework Condition="'$(NETCoreSdkVersion)' &gt;= '10.0'">net10.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
-    <UseWPF>true</UseWPF>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net9.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="*.cs" />
-
-    <Content Include="EditorAssets\**">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Compile Include="src\TwoDCore.Editor\**\*.cs"
+             Exclude="src\TwoDCore.Editor\bin\**;src\TwoDCore.Editor\obj\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="src\TwoDCore.Core\TwoDCore.Core.csproj" />
+    <ProjectReference Include="src\TwoDCore.Persistence\TwoDCore.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="EditorAssets\**" />
+  </ItemGroup>
 </Project>

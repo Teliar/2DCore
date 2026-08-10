@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/TwoDCore.Core/TwoDCore.Core.csproj" />
+  <Project Path="src/TwoDCore.Persistence/TwoDCore.Persistence.csproj" />
+  <Project Path="2DCore.csproj" />
+  <Project Path="tests/TwoDCore.Tests/TwoDCore.Tests.csproj" />
+</Solution>

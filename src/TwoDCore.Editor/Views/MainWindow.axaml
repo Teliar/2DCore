@@ -1,0 +1,102 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="TwoDCore.Editor.Views.MainWindow"
+        x:CompileBindings="False"
+        Width="1200"
+        Height="780"
+        MinWidth="900"
+        MinHeight="600"
+        KeyDown="MainWindow_KeyDown"
+        Title="{Binding WindowTitle}">
+  <DockPanel>
+    <Menu DockPanel.Dock="Top" Background="#202128">
+      <MenuItem Header="File">
+        <MenuItem Header="New" Click="NewProject_Click" />
+        <MenuItem Header="Open…" Click="OpenProject_Click" />
+        <Separator />
+        <MenuItem Header="Save" Click="SaveProject_Click" />
+        <MenuItem Header="Save As…" Click="SaveProjectAs_Click" />
+        <Separator />
+        <MenuItem Header="Exit" Click="Exit_Click" />
+      </MenuItem>
+      <MenuItem Header="Edit">
+        <MenuItem Header="Undo" Click="Undo_Click" />
+        <MenuItem Header="Redo" Click="Redo_Click" />
+        <Separator />
+        <MenuItem Header="Copy" Click="Copy_Click" />
+        <MenuItem Header="Paste" Click="Paste_Click" />
+        <MenuItem Header="Duplicate" Click="Duplicate_Click" />
+        <MenuItem Header="Delete" Click="Delete_Click" />
+      </MenuItem>
+    </Menu>
+
+    <Border DockPanel.Dock="Top" Background="#202128" BorderBrush="#30323B" BorderThickness="0,0,0,1">
+      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <StackPanel Orientation="Horizontal" Margin="5,3">
+          <Button Classes="toolbar" Content="New" Click="NewProject_Click" />
+          <Button Classes="toolbar" Content="Open" Click="OpenProject_Click" />
+          <Button Classes="toolbar" Content="Save" Click="SaveProject_Click" />
+          <Border Width="1" Margin="6,3" Background="#3A3D48" />
+          <Button Classes="toolbar" Content="Object" Click="AddObject_Click" />
+          <Button Classes="toolbar" Content="Image" Click="AddImage_Click" />
+          <Button Classes="toolbar" Content="Folder" Click="AddFolder_Click" />
+          <Button Classes="toolbar" Content="Sound" Click="AddSound_Click" />
+          <Button Classes="toolbar" Content="Sound Trigger" Click="AddSoundTrigger_Click" />
+          <Button Classes="toolbar" Content="Spatial Sound" Click="AddSpatialSound_Click" />
+          <Border Width="1" Margin="6,3" Background="#3A3D48" />
+          <Button Classes="toolbar" Content="Undo" Click="Undo_Click" />
+          <Button Classes="toolbar" Content="Redo" Click="Redo_Click" />
+          <Button Classes="toolbar" Content="Delete" Click="Delete_Click" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Background="#202128" BorderBrush="#30323B" BorderThickness="0,1,0,0">
+      <TextBlock Text="{Binding StatusText}" Margin="9,5" Foreground="#ABB0BF" />
+    </Border>
+
+    <Grid ColumnDefinitions="250,5,*,5,280">
+      <Border Grid.Column="0" Classes="panel">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Classes="panel-title" Text="INSPECTOR" />
+          <ContentControl x:Name="InspectorHost" Grid.Row="1" />
+        </Grid>
+      </Border>
+
+      <GridSplitter Grid.Column="1" Background="#101115" ResizeDirection="Columns" />
+
+      <Border Grid.Column="2" Classes="panel">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Classes="panel-title" Text="VIEWPORT 2D" />
+          <ContentControl x:Name="ViewportHost" Grid.Row="1" />
+        </Grid>
+      </Border>
+
+      <GridSplitter Grid.Column="3" Background="#101115" ResizeDirection="Columns" />
+
+      <Border Grid.Column="4" Classes="panel">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Classes="panel-title" Text="SCENE HIERARCHY" />
+          <TreeView x:Name="ExplorerTree"
+                    Grid.Row="1"
+                    ItemsSource="{Binding ExplorerRoots}"
+                    SelectionChanged="ExplorerTree_SelectionChanged"
+                    PointerPressed="ExplorerTree_PointerPressed"
+                    PointerReleased="ExplorerTree_PointerReleased"
+                    Background="#18191E"
+                    BorderThickness="0"
+                    Margin="4">
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate ItemsSource="{Binding Children}">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <TextBlock Text="{Binding Icon}" Foreground="#75A7FF" />
+                  <TextBlock Text="{Binding Name}" />
+                </StackPanel>
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
+        </Grid>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

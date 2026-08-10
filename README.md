@@ -1,80 +1,100 @@
-# 🎮 2DCore
+# 2DCore
 
-**2DCore** — современный 2D-игровой движок и редактор сцен на платформах C# и .NET 10.0 с графическим интерфейсом в стиле Unity / Unreal Engine / Roblox Studio.
+2DCore is a cross-platform 2D scene editor written in C# with Avalonia UI. The main editor targets Windows, Linux and macOS from one `net9.0` project.
 
----
+## Requirements
 
-## 📋 Требования к среде разработки
+- .NET 9 SDK or newer.
+- Windows 10/11, a desktop Linux distribution, or macOS.
+- On Debian/Ubuntu Linux, Avalonia may require: `libx11-6 libice6 libsm6 libfontconfig1`.
 
-Перед началом работы убедитесь, что на вашей машине установлено следующее ПО:
+## Run
 
-* **ОС**: Windows 10 / 11 (64-bit).
-* **.NET SDK**: **.NET 10.0 SDK** (убедитесь, что `dotnet --version` возвращает версию `10.x`).
-* **IDE / Редактор**: Visual Studio 2022/2026 (с рабочей нагрузкой *.NET Desktop Development*) или Visual Studio Code (с расширением *C# Dev Kit*).
-
----
-
-## 🚀 Как запустить проект
-
-### 1. Клонирование репозитория
 ```bash
 git clone https://github.com/Teliar/2DCore.git
 cd 2DCore
-```
-
-### 2. Запуск через консоль / PowerShell
-Для сборки и запуска приложения выполните следующую команду в корневой папке проекта:
-```bash
 dotnet run
 ```
 
-Если вы хотите только собрать исполняемый файл без запуска:
+The root `2DCore.csproj` is the Avalonia application and does not use a Windows-specific target framework.
+
+Build the complete solution and run tests:
+
 ```bash
-dotnet build
+dotnet build 2DCore.slnx
+dotnet test tests/TwoDCore.Tests/TwoDCore.Tests.csproj
 ```
 
-### 3. Запуск через Visual Studio
-1. Откройте файл проекта `2DCore.csproj` в Visual Studio.
-2. Выберите конфигурацию `Debug` или `Release` и целевую платформу `net10.0-windows`.
-3. Нажмите **F5** (для запуска с отладкой) или **Ctrl+F5** (без отладки).
+Create a framework-dependent Linux build from any supported development OS:
 
----
+```bash
+dotnet publish 2DCore.csproj -c Release -r linux-x64 --self-contained false
+```
 
-## 📂 Структура проекта
+## Architecture
 
 ```text
 2DCore/
-├── EditorAssets/
-│   └── Icons/                  # Иконки и графические ресурсы интерфейса редактора
-├── CustomColorPicker.cs         # Кастомный HSV-пикер цвета для PropertyGrid
-├── Form1.cs                    # Основной код GUI редактора (вьюпорт, сцены, Undo/Redo)
-├── Form1.Designer.cs           # Дизайнер компонентов формы
-├── 2DCore.csproj               # Файл конфигурации сборки .NET 10
-└── Program.cs                  # Главная точка входа в приложение
+├── 2DCore.csproj                    # Cross-platform Avalonia entry point
+├── 2DCore.slnx
+├── EditorAssets/                    # Icons and editor resources
+├── src/
+│   ├── TwoDCore.Core/               # Scene model, hierarchy, audio math, history
+│   ├── TwoDCore.Persistence/        # DTOs, legacy-compatible JSON mapping, project I/O
+│   └── TwoDCore.Editor/             # Avalonia views, controls and editor state
+├── tests/
+│   └── TwoDCore.Tests/              # Scene graph and persistence compatibility tests
+└── legacy/
+    └── TwoDCore.Editor.WinForms/    # Temporary Windows-only reference implementation
 ```
 
----
+Dependency direction:
 
-## 📄 Формат файлов проекта и сцен
+```text
+Avalonia Editor → Persistence → Core
+Avalonia Editor ─────────────→ Core
+```
 
-Движок использует человекочитаемый формат на основе JSON:
-* **`.2dproj`** — файл конфигурации проекта (стартовая сцена, манифест сцен, настройки разрешения).
-* **`.2dscene`** — файл сцены со списком объектов, их компонентов и иерархией `Guid`.
+`Core` contains no WinForms, Avalonia, file-dialog or JSON dependencies. `Persistence` does not reference the UI.
 
----
+## Current editor features
 
-## ⌨️ Горячие клавиши редактора
+- Scene hierarchy with folders and protected drag-to-reparent behavior.
+- Shape, image, folder, global sound, sound trigger and spatial sound objects.
+- Custom-drawn zoomable and pannable viewport.
+- Type-aware Inspector with volume and transparency sliders.
+- Spatial sound radius and attenuation visualization.
+- New/Open/Save/Save As with `.2dproj` and `.2dscene` v1 compatibility.
+- Undo, redo, copy, paste, duplicate and delete.
+- Cross-platform file and asset pickers.
 
-| Сочетание клавиш | Действие |
-| :--- | :--- |
-| **Ctrl + N** | Создать новый проект |
-| **Ctrl + O** | Открыть проект (`.2dproj`) или сцену (`.2dscene`) |
-| **Ctrl + S** | Сохранить проект |
-| **Ctrl + Shift + S** | Сохранить проект как... |
-| **Ctrl + Z** | Отменить действие (Undo) |
-| **Ctrl + Shift + Z** | Повторить действие (Redo) |
-| **Ctrl + C** | Скопировать выделенный объект |
-| **Ctrl + V** | Вставить скопированный объект |
-| **Ctrl + D** | Дублировать объект |
-| **Del / Backspace** | Удалить выделенный объект |
-| **Ctrl + ~** | Показать / скрыть панель консоли вывода (Output) |
+## Project formats
+
+- `.2dproj` stores project metadata and the start scene path.
+- `.2dscene` stores object hierarchy and component data as readable JSON.
+
+The persistence tests include a legacy v1 scene fixture to prevent accidental format breakage.
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+N` | New project |
+| `Ctrl+O` | Open project or scene |
+| `Ctrl+S` | Save |
+| `Ctrl+Shift+S` | Save As |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
+| `Ctrl+C` / `Ctrl+V` | Copy / Paste |
+| `Ctrl+D` | Duplicate |
+| `Delete` | Delete selected object |
+
+## Legacy WinForms editor
+
+The previous implementation remains temporarily available as a migration reference:
+
+```powershell
+dotnet run --project legacy/TwoDCore.Editor.WinForms/TwoDCore.Editor.WinForms.csproj
+```
+
+It is not part of the cross-platform solution and will be removed after the Avalonia editor reaches complete feature parity.
