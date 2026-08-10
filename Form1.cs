@@ -105,9 +105,39 @@ namespace _2DCore
 
             var properties = TypeDescriptor.GetProperties(this, attributes, true);
             var filtered = new List<PropertyDescriptor>();
+            HashSet<string>? allowedProperties = ObjectType switch
+            {
+                "Folder" => new HashSet<string>
+                {
+                    nameof(Name)
+                },
+                "Image" => new HashSet<string>
+                {
+                    nameof(Name), nameof(Position), nameof(Size), nameof(Transparency), nameof(Texture)
+                },
+                "Sound" => new HashSet<string>
+                {
+                    nameof(Name), nameof(SoundObject.FilePath), nameof(SoundObject.Volume)
+                },
+                "SoundTrigger" => new HashSet<string>
+                {
+                    nameof(Name), nameof(Position), nameof(Size), nameof(SoundObject.FilePath), nameof(SoundObject.Volume)
+                },
+                "SpatialSoundTrigger" => new HashSet<string>
+                {
+                    nameof(Name), nameof(Position), nameof(Size), nameof(SoundObject.FilePath), nameof(SoundObject.Volume),
+                    nameof(SpatialSoundObject.FullVolumeRadius), nameof(SpatialSoundObject.Radius),
+                    nameof(SpatialSoundObject.Rolloff)
+                },
+                _ => null
+            };
 
             foreach (PropertyDescriptor prop in properties)
             {
+                if (allowedProperties != null && !allowedProperties.Contains(prop.Name))
+                {
+                    continue;
+                }
                 if (ObjectType != "Image" && prop.Name == nameof(Texture))
                 {
                     continue;
@@ -150,8 +180,8 @@ namespace _2DCore
 
     public class SoundObject : GameObject
     {
-        private string filePath = string.Empty;
-        private double volume = 1.0;
+        protected string filePath = string.Empty;
+        protected double volume = 1.0;
 
         public SoundObject()
         {
@@ -173,7 +203,8 @@ namespace _2DCore
 
         [Category("Sound")]
         [DisplayName("Volume")]
-        [Description("Громкость воспроизведения (от 0.0 до 1.0)")]
+        [Description("Base playback volume from 0% to 100%.")]
+        [Editor(typeof(VolumeSliderEditor), typeof(UITypeEditor))]
         public double Volume
         {
             get => volume;
@@ -251,6 +282,143 @@ namespace _2DCore
             base.OnHandleCreated(e);
             SendMessage(Handle, TVM_SETEXTENDEDSTYLE,
                 (IntPtr)TVS_EX_DOUBLEBUFFER, (IntPtr)TVS_EX_DOUBLEBUFFER);
+        }
+    }
+
+    public enum SoundRolloff
+    {
+        Linear,
+        Smooth
+    }
+
+    public class SpatialSoundObject : SoundObject
+    {
+        private float radius = 250f;
+        private float fullVolumeRadius = 50f;
+
+        public SpatialSoundObject()
+        {
+            Name = "SpatialSoundTrigger";
+            ObjectType = "SpatialSoundTrigger";
+        }
+
+        [Category("Spatial Sound")]
+        [DisplayName("Full Volume Radius")]
+        [Description("Distance at which the sound still plays at its full configured volume.")]
+        public float FullVolumeRadius
+        {
+            get => fullVolumeRadius;
+            set => fullVolumeRadius = Math.Clamp(value, 0f, radius);
+        }
+
+        [Category("Spatial Sound")]
+        [DisplayName("Radius")]
+        [Description("Maximum audible distance. The sound fades to silence at this radius.")]
+        public float Radius
+        {
+            get => radius;
+            set
+            {
+                radius = Math.Max(10f, value);
+                fullVolumeRadius = Math.Min(fullVolumeRadius, radius);
+            }
+        }
+
+        [Category("Spatial Sound")]
+        [DisplayName("Rolloff")]
+        [Description("Controls how volume fades between the full-volume and maximum radii.")]
+        public SoundRolloff Rolloff { get; set; } = SoundRolloff.Smooth;
+
+        public double CalculateVolumeAtDistance(float distance)
+        {
+            if (distance <= FullVolumeRadius) return Volume;
+            if (distance >= Radius) return 0.0;
+
+            double t = (distance - FullVolumeRadius) / Math.Max(0.001f, Radius - FullVolumeRadius);
+            double attenuation = Rolloff == SoundRolloff.Smooth
+                ? 1.0 - (t * t * (3.0 - 2.0 * t))
+                : 1.0 - t;
+            return Volume * Math.Clamp(attenuation, 0.0, 1.0);
+        }
+
+        public override GameObject Clone()
+        {
+            return new SpatialSoundObject
+            {
+                Id = Id,
+                Name = Name,
+                Position = Position,
+                Size = Size,
+                FilePath = FilePath,
+                Volume = Volume,
+                Radius = Radius,
+                FullVolumeRadius = FullVolumeRadius,
+                Rolloff = Rolloff,
+                ObjectType = ObjectType,
+                Children = Children.Select(c => c.Clone()).ToList()
+            };
+        }
+    }
+
+    public class VolumeSliderEditor : UITypeEditor
+    {
+        public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext? context)
+            => UITypeEditorEditStyle.DropDown;
+
+        public override object? EditValue(ITypeDescriptorContext? context, IServiceProvider? provider, object? value)
+        {
+            IWindowsFormsEditorService? editorService =
+                provider?.GetService(typeof(IWindowsFormsEditorService)) as IWindowsFormsEditorService;
+            if (editorService == null) return value;
+
+            double currentVolume = value is double volumeValue ? volumeValue : 1.0;
+            using VolumeSliderControl slider = new VolumeSliderControl(currentVolume);
+            editorService.DropDownControl(slider);
+            return slider.Volume;
+        }
+    }
+
+    public sealed class VolumeSliderControl : UserControl
+    {
+        private readonly TrackBar volumeTrackBar;
+        private readonly Label volumeLabel;
+
+        public double Volume => volumeTrackBar.Value / 100.0;
+
+        public VolumeSliderControl(double initialVolume)
+        {
+            Size = new Size(240, 58);
+            BackColor = System.Drawing.Color.FromArgb(24, 25, 30);
+
+            volumeTrackBar = new TrackBar
+            {
+                Minimum = 0,
+                Maximum = 100,
+                TickFrequency = 10,
+                SmallChange = 1,
+                LargeChange = 10,
+                Value = (int)Math.Round(Math.Clamp(initialVolume, 0.0, 1.0) * 100.0),
+                Location = new Point(4, 4),
+                Size = new Size(185, 45)
+            };
+
+            volumeLabel = new Label
+            {
+                ForeColor = System.Drawing.Color.White,
+                Location = new Point(190, 17),
+                Size = new Size(46, 22),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            volumeTrackBar.ValueChanged += (_, _) => UpdateLabel();
+            Controls.Add(volumeTrackBar);
+            Controls.Add(volumeLabel);
+            UpdateLabel();
+        }
+
+        private void UpdateLabel()
+        {
+            volumeLabel.Text = $"{volumeTrackBar.Value}%";
         }
     }
 
@@ -360,6 +528,16 @@ namespace _2DCore
 
         [JsonPropertyName("volume")]
         public double Volume { get; set; } = 1.0;
+
+        [JsonPropertyName("radius")]
+        public float? Radius { get; set; }
+
+        [JsonPropertyName("fullVolumeRadius")]
+        public float? FullVolumeRadius { get; set; }
+
+        [JsonPropertyName("rolloff")]
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public SoundRolloff? Rolloff { get; set; }
     }
     #endregion
 
@@ -1531,10 +1709,14 @@ namespace _2DCore
                 ToolStripMenuItem menuSoundTriggerItem = new ToolStripMenuItem("SoundTrigger", soundIcon) { ForeColor = System.Drawing.Color.White };
                 menuSoundTriggerItem.Click += (s, e) => AddNewObject("SoundTrigger");
 
+                ToolStripMenuItem menuSpatialSoundTriggerItem = new ToolStripMenuItem("Spatial Sound Trigger", soundTriggerIcon) { ForeColor = System.Drawing.Color.White };
+                menuSpatialSoundTriggerItem.Click += (s, e) => AddNewObject("SpatialSoundTrigger");
+
                 menu.Items.Add(menuFolderItem);
                 menu.Items.Add(menuImageItem);
                 menu.Items.Add(menuObjectItem);
                 menu.Items.Add(menuSoundTriggerItem);
+                menu.Items.Add(menuSpatialSoundTriggerItem);
             }
 
             return menu;
@@ -1660,6 +1842,7 @@ namespace _2DCore
             if (draggedObj is SoundService) return false;
 
             GameObject? targetObj = targetNode?.Tag as GameObject;
+            if (draggedObj is SpatialSoundObject && targetObj is SoundService) return false;
             if (targetObj != null && IsDescendant(draggedObj, targetObj)) return false;
 
             GameObject? currentParent = FindParentObject(draggedObj);
@@ -1725,7 +1908,16 @@ namespace _2DCore
             SaveStateForUndo();
             GameObject obj;
 
-            if (typeName == "Sound" || typeName == "SoundTrigger")
+            if (typeName == "SpatialSoundTrigger")
+            {
+                obj = new SpatialSoundObject
+                {
+                    Name = GetUniqueName(typeName),
+                    Size = new Size(50, 50),
+                    Position = new Point(-25, -25)
+                };
+            }
+            else if (typeName == "Sound" || typeName == "SoundTrigger")
             {
                 obj = new SoundObject
                 {
@@ -2194,6 +2386,43 @@ namespace _2DCore
 
                 if (obj is SoundObject)
                 {
+                    if (obj is SpatialSoundObject spatialSound)
+                    {
+                        float centerX = obj.Position.X + obj.Size.Width / 2f;
+                        float centerY = obj.Position.Y + obj.Size.Height / 2f;
+                        float diameter = spatialSound.Radius * 2f;
+                        RectangleF radiusBounds = new RectangleF(
+                            centerX - spatialSound.Radius,
+                            centerY - spatialSound.Radius,
+                            diameter,
+                            diameter);
+
+                        System.Drawing.Color radiusColor = selectedObjects.Contains(obj)
+                            ? System.Drawing.Color.FromArgb(235, 0, 220, 65)
+                            : System.Drawing.Color.FromArgb(165, 0, 185, 50);
+                        using (Pen radiusPen = new Pen(radiusColor, 2f / zoom))
+                        {
+                            g.DrawEllipse(radiusPen, radiusBounds);
+                        }
+
+                        if (spatialSound.FullVolumeRadius > 0f && selectedObjects.Contains(obj))
+                        {
+                            float innerDiameter = spatialSound.FullVolumeRadius * 2f;
+                            RectangleF innerBounds = new RectangleF(
+                                centerX - spatialSound.FullVolumeRadius,
+                                centerY - spatialSound.FullVolumeRadius,
+                                innerDiameter,
+                                innerDiameter);
+                            using (Pen innerPen = new Pen(System.Drawing.Color.FromArgb(145, 80, 220, 110), 1f / zoom)
+                            {
+                                DashStyle = DashStyle.Dash
+                            })
+                            {
+                                g.DrawEllipse(innerPen, innerBounds);
+                            }
+                        }
+                    }
+
                     if (soundTriggerIcon != null)
                     {
                         if (alpha < 0.99f)
@@ -2617,28 +2846,34 @@ namespace _2DCore
                 Components = new List<ComponentDTO>()
             };
 
-            // Transform Component
-            dto.Components.Add(new TransformComponentDTO
+            bool hasTransform = obj.ObjectType != "Folder" && obj.ObjectType != "Sound" && obj.ObjectType != "SoundService";
+            if (hasTransform)
             {
-                X = obj.Position.X,
-                Y = obj.Position.Y,
-                Width = obj.Size.Width,
-                Height = obj.Size.Height,
-                Transparency = obj.Transparency
-            });
-
-            // Render Component
-            string relTexturePath = string.Empty;
-            if (!string.IsNullOrEmpty(obj.TexturePath))
-            {
-                relTexturePath = GetRelativePath(obj.TexturePath, projectDir);
+                dto.Components.Add(new TransformComponentDTO
+                {
+                    X = obj.Position.X,
+                    Y = obj.Position.Y,
+                    Width = obj.Size.Width,
+                    Height = obj.Size.Height,
+                    Transparency = obj.Transparency
+                });
             }
 
-            dto.Components.Add(new RenderComponentDTO
+            bool hasRender = obj.ObjectType == "Object" || obj.ObjectType == "Image";
+            if (hasRender)
             {
-                ColorHex = ColorTranslator.ToHtml(obj.Color),
-                TexturePath = relTexturePath
-            });
+                string relTexturePath = string.Empty;
+                if (!string.IsNullOrEmpty(obj.TexturePath))
+                {
+                    relTexturePath = GetRelativePath(obj.TexturePath, projectDir);
+                }
+
+                dto.Components.Add(new RenderComponentDTO
+                {
+                    ColorHex = ColorTranslator.ToHtml(obj.Color),
+                    TexturePath = relTexturePath
+                });
+            }
 
             // Sound Component
             if (obj is SoundObject soundObj)
@@ -2652,7 +2887,10 @@ namespace _2DCore
                 dto.Components.Add(new SoundComponentDTO
                 {
                     AudioFilePath = relAudioPath,
-                    Volume = soundObj.Volume
+                    Volume = soundObj.Volume,
+                    Radius = soundObj is SpatialSoundObject spatialSound ? spatialSound.Radius : null,
+                    FullVolumeRadius = soundObj is SpatialSoundObject spatialSoundWithRadius ? spatialSoundWithRadius.FullVolumeRadius : null,
+                    Rolloff = soundObj is SpatialSoundObject spatialSoundWithRolloff ? spatialSoundWithRolloff.Rolloff : null
                 });
             }
 
@@ -2679,6 +2917,10 @@ namespace _2DCore
             if (dto.ObjectType == "SoundService")
             {
                 obj = new SoundService();
+            }
+            else if (dto.ObjectType == "SpatialSoundTrigger")
+            {
+                obj = new SpatialSoundObject();
             }
             else if (dto.ObjectType == "SoundTrigger" || dto.ObjectType == "Sound")
             {
@@ -2745,6 +2987,12 @@ namespace _2DCore
                     else if (comp is SoundComponentDTO soundComp && obj is SoundObject soundObj)
                     {
                         soundObj.Volume = soundComp.Volume;
+                        if (soundObj is SpatialSoundObject spatialSound)
+                        {
+                            spatialSound.Radius = soundComp.Radius ?? 250f;
+                            spatialSound.FullVolumeRadius = soundComp.FullVolumeRadius ?? 50f;
+                            spatialSound.Rolloff = soundComp.Rolloff ?? SoundRolloff.Smooth;
+                        }
                         if (!string.IsNullOrEmpty(soundComp.AudioFilePath))
                         {
                             string absAudioPath = Path.IsPathRooted(soundComp.AudioFilePath)
