@@ -11,6 +11,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Ignore a stale pre-migration source tree left by older checkouts. -->
+    <Compile Remove="NativeEngine\**\*.cs" />
+
     <Content Include="EditorAssets\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
