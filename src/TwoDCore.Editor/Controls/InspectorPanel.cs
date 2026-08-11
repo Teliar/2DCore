@@ -1,7 +1,9 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using TwoDCore.Core.Audio;
 using TwoDCore.Core.Scene;
@@ -12,11 +14,14 @@ namespace TwoDCore.Editor.Controls;
 public sealed class InspectorPanel : ScrollViewer
 {
     private readonly EditorSession _session;
-    private readonly StackPanel _content = new() { Spacing = 8, Margin = new Thickness(10) };
+    private readonly StackPanel _content = new() { Spacing = 0 };
 
     public InspectorPanel(EditorSession session)
     {
         _session = session;
+        Background = new SolidColorBrush(Color.Parse("#18191E"));
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         Content = _content;
         _session.SelectionChanged += (_, _) => Rebuild();
         Rebuild();
@@ -25,58 +30,78 @@ public sealed class InspectorPanel : ScrollViewer
     private void Rebuild()
     {
         _content.Children.Clear();
-        SceneObject? item = _session.SelectedObject;
-        if (item == null)
+        if (_session.SelectedObjects.Count > 1)
         {
-            _content.Children.Add(new TextBlock { Text = "Select an object", Opacity = 0.6 });
+            _content.Children.Add(new TextBlock
+            {
+                Text = $"{_session.SelectedObjects.Count} objects selected",
+                Foreground = new SolidColorBrush(Color.Parse("#BFC3D0")),
+                Margin = new Thickness(10, 12)
+            });
             return;
         }
 
-        AddHeader(item.Kind.ToString());
+        SceneObject? item = _session.SelectedObject;
+        if (item == null)
+        {
+            _content.Children.Add(new TextBlock { Text = "Select an object", Opacity = 0.55, Margin = new Thickness(10, 12) });
+            return;
+        }
+        if (item is SoundServiceObject) return;
+
+        AddCategory("General");
         AddText("Name", item.Name, value => item.Name = value);
 
-        if (item is FolderObject or SoundServiceObject) return;
+        if (item is FolderObject) return;
 
         if (item is not GlobalSoundObject)
         {
-            AddNumber("X", item.Position.X, value => item.Position = new(value, item.Position.Y));
-            AddNumber("Y", item.Position.Y, value => item.Position = new(item.Position.X, value));
-            AddNumber("Width", item.Size.Width, value => item.Size = new SceneSize(value, item.Size.Height).Clamp(1));
-            AddNumber("Height", item.Size.Height, value => item.Size = new SceneSize(item.Size.Width, value).Clamp(1));
+            AddCategory("Transform");
+            AddNumber("Position X", item.Position.X, value => item.Position = new(value, item.Position.Y));
+            AddNumber("Position Y", item.Position.Y, value => item.Position = new(item.Position.X, value));
+            AddNumber("Width", item.Size.Width, value => item.Size = new SceneSize(value, item.Size.Height).Clamp(15));
+            AddNumber("Height", item.Size.Height, value => item.Size = new SceneSize(item.Size.Width, value).Clamp(15));
         }
 
         if (item is SoundObjectBase sound)
         {
-            AddFile("Audio", sound.AudioFilePath, [new FilePickerFileType("Audio") { Patterns = ["*.wav", "*.mp3", "*.wma", "*.ogg"] }], value => sound.AudioFilePath = value);
+            AddCategory("Sound");
+            AddFile("Audio File", sound.AudioFilePath, [new FilePickerFileType("Audio Files") { Patterns = ["*.wav", "*.mp3", "*.wma", "*.ogg"] }], value => sound.AudioFilePath = value);
             AddSlider("Volume", sound.Volume, 0, 1, value => sound.Volume = value, value => $"{value:P0}");
             if (sound is SpatialSoundObject spatial)
             {
-                AddNumber("Full radius", spatial.FullVolumeRadius, value => spatial.FullVolumeRadius = value);
-                AddNumber("Radius", spatial.Radius, value => spatial.Radius = value);
+                AddCategory("Spatial Sound");
+                AddNumber("Full Volume Radius", spatial.FullVolumeRadius, value => spatial.FullVolumeRadius = Math.Clamp(value, 0, spatial.Radius));
+                AddNumber("Radius", spatial.Radius, value => spatial.Radius = Math.Max(10, value));
                 AddEnum("Rolloff", spatial.Rolloff, value => spatial.Rolloff = value);
             }
             return;
         }
 
+        AddCategory("Appearance");
         AddSlider("Transparency", item.Transparency, 0, 1, value => item.Transparency = value, value => $"{value:P0}");
-        if (item is ShapeObject) AddText("Color", item.ColorHex, value => item.ColorHex = value);
-        if (item is ImageObject)
-        {
-            AddFile("Image", item.TexturePath, [FilePickerFileTypes.ImageAll], value => item.TexturePath = value);
-        }
+        if (item is ShapeObject) AddColor("Color", item.ColorHex, value => item.ColorHex = value);
+        if (item is ImageObject) AddFile("Image", item.TexturePath, [FilePickerFileTypes.ImageAll], value => item.TexturePath = value);
     }
 
-    private void AddHeader(string text) => _content.Children.Add(new TextBlock
+    private void AddCategory(string text) => _content.Children.Add(new Border
     {
-        Text = text,
-        FontSize = 16,
-        FontWeight = Avalonia.Media.FontWeight.SemiBold,
-        Margin = new Thickness(0, 0, 0, 6)
+        Background = new SolidColorBrush(Color.Parse("#202128")),
+        BorderBrush = new SolidColorBrush(Color.Parse("#2A2C34")),
+        BorderThickness = new Thickness(0, 1, 0, 1),
+        Margin = new Thickness(0, _content.Children.Count == 0 ? 0 : 7, 0, 0),
+        Child = new TextBlock
+        {
+            Text = text,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.Parse("#AAAFBE")),
+            Margin = new Thickness(8, 5)
+        }
     });
 
     private void AddText(string label, string value, Action<string> setter)
     {
-        TextBox editor = new() { Text = value };
+        TextBox editor = CreateTextBox(value);
         bool captured = false;
         editor.GotFocus += (_, _) => { if (!captured) { _session.Capture(); captured = true; } };
         editor.LostFocus += (_, _) =>
@@ -90,12 +115,12 @@ public sealed class InspectorPanel : ScrollViewer
 
     private void AddNumber(string label, double value, Action<double> setter)
     {
-        TextBox editor = new() { Text = value.ToString("0.##") };
+        TextBox editor = CreateTextBox(value.ToString("0.##", CultureInfo.InvariantCulture));
         bool captured = false;
         editor.GotFocus += (_, _) => { if (!captured) { _session.Capture(); captured = true; } };
         editor.LostFocus += (_, _) =>
         {
-            if (double.TryParse(editor.Text, out double parsed)) setter(parsed);
+            if (double.TryParse(editor.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)) setter(parsed);
             _session.CommitPropertyChange($"Changed {label}");
             captured = false;
         };
@@ -104,9 +129,10 @@ public sealed class InspectorPanel : ScrollViewer
 
     private void AddSlider(string label, double value, double minimum, double maximum, Action<double> setter, Func<double, string> formatter)
     {
-        Slider slider = new() { Minimum = minimum, Maximum = maximum, Value = value };
-        TextBlock display = new() { Text = formatter(value), Width = 44, VerticalAlignment = VerticalAlignment.Center };
-        StackPanel editor = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
+        Slider slider = new() { Minimum = minimum, Maximum = maximum, Value = value, MinWidth = 80, VerticalAlignment = VerticalAlignment.Center };
+        TextBlock display = new() { Text = formatter(value), Width = 38, VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Right };
+        Grid editor = new() { ColumnDefinitions = new ColumnDefinitions("*,42") };
+        Grid.SetColumn(display, 1);
         editor.Children.Add(slider);
         editor.Children.Add(display);
         bool captured = false;
@@ -124,10 +150,10 @@ public sealed class InspectorPanel : ScrollViewer
 
     private void AddEnum<T>(string label, T value, Action<T> setter) where T : struct, Enum
     {
-        ComboBox editor = new() { ItemsSource = Enum.GetValues<T>(), SelectedItem = value };
+        ComboBox editor = new() { ItemsSource = Enum.GetValues<T>(), SelectedItem = value, HorizontalAlignment = HorizontalAlignment.Stretch };
         editor.SelectionChanged += (_, _) =>
         {
-            if (editor.SelectedItem is not T selected) return;
+            if (editor.SelectedItem is not T selected || EqualityComparer<T>.Default.Equals(selected, value)) return;
             _session.Capture();
             setter(selected);
             _session.CommitPropertyChange($"Changed {label}");
@@ -135,11 +161,60 @@ public sealed class InspectorPanel : ScrollViewer
         AddRow(label, editor);
     }
 
+    private void AddColor(string label, string value, Action<string> setter)
+    {
+        TextBox text = CreateTextBox(value);
+        Border swatch = new()
+        {
+            Width = 25,
+            Height = 20,
+            BorderBrush = Brushes.Gray,
+            BorderThickness = new Thickness(1),
+            Background = new SolidColorBrush(ParseColor(value)),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Button picker = new() { Content = swatch, Width = 35, Padding = new Thickness(3) };
+        Grid editor = new() { ColumnDefinitions = new ColumnDefinitions("*,39"), ColumnSpacing = 3 };
+        Grid.SetColumn(picker, 1);
+        editor.Children.Add(text);
+        editor.Children.Add(picker);
+
+        void Apply(string color)
+        {
+            _session.Capture();
+            setter(color);
+            text.Text = color;
+            swatch.Background = new SolidColorBrush(ParseColor(color));
+            _session.CommitPropertyChange($"Changed {label}");
+        }
+
+        text.LostFocus += (_, _) =>
+        {
+            string candidate = text.Text ?? value;
+            try { _ = Color.Parse(candidate); Apply(candidate); }
+            catch { text.Text = value; }
+        };
+        picker.Click += (_, _) =>
+        {
+            ContextMenu menu = new();
+            foreach (string color in new[] { "#FFFFFF", "#FF5555", "#50FA7B", "#8BE9FD", "#BD93F9", "#FFB86C", "#282A36", "#000000" })
+            {
+                MenuItem item = new() { Header = color, Icon = new Border { Width = 14, Height = 14, Background = new SolidColorBrush(ParseColor(color)) } };
+                item.Click += (_, _) => Apply(color);
+                menu.Items.Add(item);
+            }
+            menu.Open(picker);
+        };
+        AddRow(label, editor);
+    }
+
     private void AddFile(string label, string value, IReadOnlyList<FilePickerFileType> types, Action<string> setter)
     {
-        TextBox path = new() { Text = value, IsReadOnly = true };
-        Button browse = new() { Content = "…", Width = 34 };
-        StackPanel editor = new() { Orientation = Orientation.Horizontal, Spacing = 4 };
+        TextBox path = CreateTextBox(value);
+        path.IsReadOnly = true;
+        Button browse = new() { Content = "...", Width = 35, Padding = new Thickness(4, 2) };
+        Grid editor = new() { ColumnDefinitions = new ColumnDefinitions("*,39"), ColumnSpacing = 3 };
+        Grid.SetColumn(browse, 1);
         editor.Children.Add(path);
         editor.Children.Add(browse);
         browse.Click += async (_, _) =>
@@ -164,11 +239,31 @@ public sealed class InspectorPanel : ScrollViewer
 
     private void AddRow(string label, Control editor)
     {
-        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("105,*"), ColumnSpacing = 8 };
-        TextBlock caption = new() { Text = label, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.8 };
+        Grid row = new()
+        {
+            ColumnDefinitions = new ColumnDefinitions("112,*"),
+            ColumnSpacing = 6,
+            MinHeight = 28,
+            Margin = new Thickness(7, 2)
+        };
+        TextBlock caption = new() { Text = label, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Color.Parse("#DCDDDF")) };
         Grid.SetColumn(editor, 1);
         row.Children.Add(caption);
         row.Children.Add(editor);
         _content.Children.Add(row);
+    }
+
+    private static TextBox CreateTextBox(string value) => new()
+    {
+        Text = value,
+        MinHeight = 24,
+        Padding = new Thickness(5, 2),
+        HorizontalAlignment = HorizontalAlignment.Stretch
+    };
+
+    private static Color ParseColor(string value)
+    {
+        try { return Color.Parse(value); }
+        catch { return Colors.White; }
     }
 }

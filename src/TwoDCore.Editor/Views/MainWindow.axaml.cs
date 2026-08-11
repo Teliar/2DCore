@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using System.ComponentModel;
+using TwoDCore.Core.Audio;
 using TwoDCore.Core.Scene;
 using TwoDCore.Editor.Controls;
 using TwoDCore.Editor.ViewModels;
@@ -15,7 +17,9 @@ public sealed partial class MainWindow : Window
     private readonly SceneViewport _viewport;
     private ExplorerNodeViewModel? _draggedExplorerNode;
     private Point _explorerPressPoint;
+    private bool _explorerControlPressed;
     private bool _allowClose;
+    private bool _outputVisible = true;
 
     public MainWindow()
     {
@@ -25,17 +29,34 @@ public sealed partial class MainWindow : Window
         ViewportHost.Content = _viewport;
         InspectorHost.Content = new InspectorPanel(_session);
         Closing += MainWindow_Closing;
+        _session.PropertyChanged += Session_PropertyChanged;
+        Log("Editor ready");
     }
 
     private void ExplorerTree_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (_explorerControlPressed) return;
         if (ExplorerTree.SelectedItem is ExplorerNodeViewModel node) _session.Select(node.Item);
     }
 
     private void ExplorerTree_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(ExplorerTree).Properties.IsLeftButtonPressed) return;
-        _draggedExplorerNode = (e.Source as StyledElement)?.DataContext as ExplorerNodeViewModel;
+        ExplorerNodeViewModel? node = (e.Source as StyledElement)?.DataContext as ExplorerNodeViewModel;
+        PointerPoint point = e.GetCurrentPoint(ExplorerTree);
+        if (point.Properties.IsRightButtonPressed)
+        {
+            OpenAddMenu(ExplorerTree, node);
+            e.Handled = true;
+            return;
+        }
+        if (!point.Properties.IsLeftButtonPressed) return;
+        _explorerControlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        if (_explorerControlPressed && node?.Item != null)
+        {
+            _session.Select(node.Item, additive: true, toggle: true);
+            e.Handled = true;
+        }
+        _draggedExplorerNode = node;
         _explorerPressPoint = e.GetPosition(ExplorerTree);
     }
 
@@ -43,6 +64,7 @@ public sealed partial class MainWindow : Window
     {
         ExplorerNodeViewModel? dragged = _draggedExplorerNode;
         _draggedExplorerNode = null;
+        _explorerControlPressed = false;
         if (dragged?.Item == null) return;
         Point releasePoint = e.GetPosition(ExplorerTree);
         double dragDistance = Math.Sqrt(
@@ -53,7 +75,6 @@ public sealed partial class MainWindow : Window
         ExplorerNodeViewModel? targetNode = (e.Source as StyledElement)?.DataContext as ExplorerNodeViewModel;
         if (ReferenceEquals(dragged, targetNode)) return;
         SceneObject? target = targetNode?.Item;
-        if (target is not (null or FolderObject or TwoDCore.Core.Audio.SoundServiceObject)) return;
         _session.Move(dragged.Item, target);
     }
 
@@ -71,7 +92,10 @@ public sealed partial class MainWindow : Window
         else if (control && e.Key == Key.C) _session.CopySelected();
         else if (control && e.Key == Key.V) _session.Paste();
         else if (control && e.Key == Key.D) _session.DuplicateSelected();
-        else if (e.Key == Key.Delete) _session.DeleteSelected();
+        else if (control && e.Key == Key.OemTilde) ToggleOutputPanel();
+        else if (control && e.Key is Key.OemPlus or Key.Add) _viewport.ZoomIn();
+        else if (control && e.Key is Key.OemMinus or Key.Subtract) _viewport.ZoomOut();
+        else if (e.Key is Key.Delete or Key.Back) _session.DeleteSelected();
         else return;
         e.Handled = true;
     }
@@ -238,14 +262,14 @@ public sealed partial class MainWindow : Window
         await dialog.ShowDialog(this);
     }
 
-    private SceneObject? SelectedFolder => _session.SelectedObject is FolderObject folder ? folder : null;
+    private SceneObject? SelectedParent => _session.SelectedObject is SoundServiceObject ? null : _session.SelectedObject;
 
-    private void AddObject_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.Object, SelectedFolder);
-    private void AddImage_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.Image, SelectedFolder);
-    private void AddFolder_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.Folder, SelectedFolder);
+    private void AddObject_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.Object, SelectedParent);
+    private void AddImage_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.Image, SelectedParent);
+    private void AddFolder_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.Folder, SelectedParent);
     private void AddSound_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.Sound);
-    private void AddSoundTrigger_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.SoundTrigger, SelectedFolder);
-    private void AddSpatialSound_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.SpatialSoundTrigger, SelectedFolder);
+    private void AddSoundTrigger_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.SoundTrigger, SelectedParent);
+    private void AddSpatialSound_Click(object? sender, RoutedEventArgs e) => _session.Add(SceneObjectKind.SpatialSoundTrigger, SelectedParent);
     private void Delete_Click(object? sender, RoutedEventArgs e) => _session.DeleteSelected();
     private void Duplicate_Click(object? sender, RoutedEventArgs e) => _session.DuplicateSelected();
     private void Copy_Click(object? sender, RoutedEventArgs e) => _session.CopySelected();
@@ -253,6 +277,66 @@ public sealed partial class MainWindow : Window
     private void Undo_Click(object? sender, RoutedEventArgs e) => _session.Undo();
     private void Redo_Click(object? sender, RoutedEventArgs e) => _session.Redo();
     private void Exit_Click(object? sender, RoutedEventArgs e) => Close();
+
+    private void NodeAdd_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control) return;
+        ExplorerNodeViewModel? node = control.Tag as ExplorerNodeViewModel ?? control.DataContext as ExplorerNodeViewModel;
+        OpenAddMenu(control, node);
+        e.Handled = true;
+    }
+
+    private void OpenAddMenu(Control placementTarget, ExplorerNodeViewModel? node)
+    {
+        SceneObject? parent = node?.Item;
+        ContextMenu menu = new();
+        if (parent is SoundServiceObject)
+        {
+            AddMenuItem(menu, "Sound", () => _session.Add(SceneObjectKind.Sound));
+        }
+        else
+        {
+            AddMenuItem(menu, "Folder", () => _session.Add(SceneObjectKind.Folder, parent));
+            AddMenuItem(menu, "Image", () => _session.Add(SceneObjectKind.Image, parent));
+            AddMenuItem(menu, "Object", () => _session.Add(SceneObjectKind.Object, parent));
+            AddMenuItem(menu, "SoundTrigger", () => _session.Add(SceneObjectKind.SoundTrigger, parent));
+            AddMenuItem(menu, "Spatial Sound Trigger", () => _session.Add(SceneObjectKind.SpatialSoundTrigger, parent));
+        }
+        menu.Open(placementTarget);
+    }
+
+    private static void AddMenuItem(ContextMenu menu, string title, Action action)
+    {
+        MenuItem item = new() { Header = title };
+        item.Click += (_, _) => action();
+        menu.Items.Add(item);
+    }
+
+    private void Session_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EditorSession.StatusText)) Log(_session.StatusText);
+    }
+
+    private void Log(string text)
+    {
+        string line = $"[{DateTime.Now:HH:mm:ss}] [INFO] {text}";
+        OutputTextBox.Text = string.IsNullOrEmpty(OutputTextBox.Text) ? line : $"{OutputTextBox.Text}{Environment.NewLine}{line}";
+        OutputTextBox.CaretIndex = OutputTextBox.Text.Length;
+    }
+
+    private void ToggleOutputPanel()
+    {
+        _outputVisible = !_outputVisible;
+        OutputPanel.IsVisible = _outputVisible;
+        OutputSplitter.IsVisible = _outputVisible;
+    }
+
+    private void ToggleOutput_Click(object? sender, RoutedEventArgs e) => ToggleOutputPanel();
+    private void CloseOutput_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_outputVisible) ToggleOutputPanel();
+    }
+    private void ClearOutput_Click(object? sender, RoutedEventArgs e) => OutputTextBox.Text = string.Empty;
 
     private enum UnsavedChoice
     {

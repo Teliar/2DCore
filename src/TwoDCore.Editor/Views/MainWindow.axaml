@@ -9,92 +9,104 @@
         KeyDown="MainWindow_KeyDown"
         Title="{Binding WindowTitle}">
   <DockPanel>
-    <Menu DockPanel.Dock="Top" Background="#202128">
+    <Menu DockPanel.Dock="Top" Background="#202128" Height="28">
       <MenuItem Header="File">
-        <MenuItem Header="New" Click="NewProject_Click" />
-        <MenuItem Header="Open…" Click="OpenProject_Click" />
-        <Separator />
-        <MenuItem Header="Save" Click="SaveProject_Click" />
-        <MenuItem Header="Save As…" Click="SaveProjectAs_Click" />
+        <MenuItem Header="New Project" InputGesture="Ctrl+N" Click="NewProject_Click" />
+        <MenuItem Header="Open Project..." InputGesture="Ctrl+O" Click="OpenProject_Click" />
+        <MenuItem Header="Save Project" InputGesture="Ctrl+S" Click="SaveProject_Click" />
+        <MenuItem Header="Save Project As..." InputGesture="Ctrl+Shift+S" Click="SaveProjectAs_Click" />
         <Separator />
         <MenuItem Header="Exit" Click="Exit_Click" />
       </MenuItem>
       <MenuItem Header="Edit">
-        <MenuItem Header="Undo" Click="Undo_Click" />
-        <MenuItem Header="Redo" Click="Redo_Click" />
+        <MenuItem Header="Undo" InputGesture="Ctrl+Z" Click="Undo_Click" />
+        <MenuItem Header="Redo" InputGesture="Ctrl+Shift+Z" Click="Redo_Click" />
         <Separator />
-        <MenuItem Header="Copy" Click="Copy_Click" />
-        <MenuItem Header="Paste" Click="Paste_Click" />
-        <MenuItem Header="Duplicate" Click="Duplicate_Click" />
-        <MenuItem Header="Delete" Click="Delete_Click" />
+        <MenuItem Header="Copy" InputGesture="Ctrl+C" Click="Copy_Click" />
+        <MenuItem Header="Paste" InputGesture="Ctrl+V" Click="Paste_Click" />
+        <MenuItem Header="Duplicate Object" InputGesture="Ctrl+D" Click="Duplicate_Click" />
+        <MenuItem Header="Delete Object" InputGesture="Delete" Click="Delete_Click" />
+      </MenuItem>
+      <MenuItem Header="View">
+        <MenuItem Header="Toggle Output Panel" InputGesture="Ctrl+OemTilde" Click="ToggleOutput_Click" />
       </MenuItem>
     </Menu>
 
-    <Border DockPanel.Dock="Top" Background="#202128" BorderBrush="#30323B" BorderThickness="0,0,0,1">
-      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-        <StackPanel Orientation="Horizontal" Margin="5,3">
-          <Button Classes="toolbar" Content="New" Click="NewProject_Click" />
-          <Button Classes="toolbar" Content="Open" Click="OpenProject_Click" />
-          <Button Classes="toolbar" Content="Save" Click="SaveProject_Click" />
-          <Border Width="1" Margin="6,3" Background="#3A3D48" />
-          <Button Classes="toolbar" Content="Object" Click="AddObject_Click" />
-          <Button Classes="toolbar" Content="Image" Click="AddImage_Click" />
-          <Button Classes="toolbar" Content="Folder" Click="AddFolder_Click" />
-          <Button Classes="toolbar" Content="Sound" Click="AddSound_Click" />
-          <Button Classes="toolbar" Content="Sound Trigger" Click="AddSoundTrigger_Click" />
-          <Button Classes="toolbar" Content="Spatial Sound" Click="AddSpatialSound_Click" />
-          <Border Width="1" Margin="6,3" Background="#3A3D48" />
-          <Button Classes="toolbar" Content="Undo" Click="Undo_Click" />
-          <Button Classes="toolbar" Content="Redo" Click="Redo_Click" />
-          <Button Classes="toolbar" Content="Delete" Click="Delete_Click" />
-        </StackPanel>
-      </ScrollViewer>
-    </Border>
+    <Grid RowDefinitions="*,4,205">
+      <Grid Grid.Row="0" ColumnDefinitions="220,4,*,4,220">
+        <Border Grid.Column="0" Classes="editor-panel">
+          <Grid RowDefinitions="28,*">
+            <Border Classes="panel-header"><TextBlock Classes="panel-title" Text="INSPECTOR PROPERTIES" /></Border>
+            <ContentControl x:Name="InspectorHost" Grid.Row="1" />
+          </Grid>
+        </Border>
 
-    <Border DockPanel.Dock="Bottom" Background="#202128" BorderBrush="#30323B" BorderThickness="0,1,0,0">
-      <TextBlock Text="{Binding StatusText}" Margin="9,5" Foreground="#ABB0BF" />
-    </Border>
+        <GridSplitter Grid.Column="1" Background="#0E0F12" ResizeDirection="Columns" />
 
-    <Grid ColumnDefinitions="250,5,*,5,280">
-      <Border Grid.Column="0" Classes="panel">
-        <Grid RowDefinitions="Auto,*">
-          <TextBlock Classes="panel-title" Text="INSPECTOR" />
-          <ContentControl x:Name="InspectorHost" Grid.Row="1" />
-        </Grid>
-      </Border>
+        <Border Grid.Column="2" Classes="editor-panel">
+          <Grid RowDefinitions="28,*">
+            <Border Classes="panel-header"><TextBlock Classes="panel-title" Text="VIEWPORT 2D" /></Border>
+            <ContentControl x:Name="ViewportHost" Grid.Row="1" />
+          </Grid>
+        </Border>
 
-      <GridSplitter Grid.Column="1" Background="#101115" ResizeDirection="Columns" />
+        <GridSplitter Grid.Column="3" Background="#0E0F12" ResizeDirection="Columns" />
 
-      <Border Grid.Column="2" Classes="panel">
-        <Grid RowDefinitions="Auto,*">
-          <TextBlock Classes="panel-title" Text="VIEWPORT 2D" />
-          <ContentControl x:Name="ViewportHost" Grid.Row="1" />
-        </Grid>
-      </Border>
+        <Border Grid.Column="4" Classes="editor-panel">
+          <Grid RowDefinitions="28,*">
+            <Border Classes="panel-header"><TextBlock Classes="panel-title" Text="SCENE HIERARCHY" /></Border>
+            <TreeView x:Name="ExplorerTree"
+                      Grid.Row="1"
+                      ItemsSource="{Binding ExplorerRoots}"
+                      SelectionChanged="ExplorerTree_SelectionChanged"
+                      PointerPressed="ExplorerTree_PointerPressed"
+                      PointerReleased="ExplorerTree_PointerReleased"
+                      Background="#18191E"
+                      BorderThickness="0"
+                      Padding="2">
+              <TreeView.Styles>
+                <Style Selector="TreeViewItem">
+                  <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                </Style>
+              </TreeView.Styles>
+              <TreeView.ItemTemplate>
+                <TreeDataTemplate ItemsSource="{Binding Children}">
+                  <Grid ColumnDefinitions="18,*,22" Height="24" Background="Transparent">
+                    <Image Source="{Binding Icon}" Width="16" Height="16" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="5,0,0,0" VerticalAlignment="Center" />
+                    <Button Grid.Column="2" Classes="node-add" Content="+" Tag="{Binding}" Click="NodeAdd_Click" ToolTip.Tip="Add child" />
+                  </Grid>
+                </TreeDataTemplate>
+              </TreeView.ItemTemplate>
+            </TreeView>
+          </Grid>
+        </Border>
+      </Grid>
 
-      <GridSplitter Grid.Column="3" Background="#101115" ResizeDirection="Columns" />
+      <GridSplitter x:Name="OutputSplitter" Grid.Row="1" Background="#0E0F12" ResizeDirection="Rows" />
 
-      <Border Grid.Column="4" Classes="panel">
-        <Grid RowDefinitions="Auto,*">
-          <TextBlock Classes="panel-title" Text="SCENE HIERARCHY" />
-          <TreeView x:Name="ExplorerTree"
-                    Grid.Row="1"
-                    ItemsSource="{Binding ExplorerRoots}"
-                    SelectionChanged="ExplorerTree_SelectionChanged"
-                    PointerPressed="ExplorerTree_PointerPressed"
-                    PointerReleased="ExplorerTree_PointerReleased"
-                    Background="#18191E"
-                    BorderThickness="0"
-                    Margin="4">
-            <TreeView.ItemTemplate>
-              <TreeDataTemplate ItemsSource="{Binding Children}">
-                <StackPanel Orientation="Horizontal" Spacing="7">
-                  <TextBlock Text="{Binding Icon}" Foreground="#75A7FF" />
-                  <TextBlock Text="{Binding Name}" />
-                </StackPanel>
-              </TreeDataTemplate>
-            </TreeView.ItemTemplate>
-          </TreeView>
+      <Border x:Name="OutputPanel" Grid.Row="2" Classes="editor-panel">
+        <Grid RowDefinitions="28,*">
+          <Border Classes="panel-header">
+            <Grid ColumnDefinitions="20,*,55,28" Margin="6,0,0,0">
+              <Image Source="avares://2DCore/EditorAssets/Icons/application_osx_terminal.png" Width="16" Height="16" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Classes="panel-title" Text="OUTPUT" />
+              <Button Grid.Column="2" Classes="header-action" Content="Clear" Click="ClearOutput_Click" />
+              <Button Grid.Column="3" Classes="header-close" Content="×" Click="CloseOutput_Click" />
+            </Grid>
+          </Border>
+          <TextBox x:Name="OutputTextBox"
+                   Grid.Row="1"
+                   IsReadOnly="True"
+                   AcceptsReturn="True"
+                   TextWrapping="NoWrap"
+                   FontFamily="Consolas"
+                   FontSize="13"
+                   Background="#0F1014"
+                   BorderThickness="0"
+                   Padding="8,6"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto" />
         </Grid>
       </Border>
     </Grid>

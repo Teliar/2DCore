@@ -13,6 +13,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\2DCore.csproj" />
     <ProjectReference Include="..\..\src\TwoDCore.Core\TwoDCore.Core.csproj" />
     <ProjectReference Include="..\..\src\TwoDCore.Persistence\TwoDCore.Persistence.csproj" />
   </ItemGroup>

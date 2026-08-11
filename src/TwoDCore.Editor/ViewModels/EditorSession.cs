@@ -11,7 +11,7 @@ public sealed partial class EditorSession : ObservableObject
 {
     private readonly ProjectFileService _projectFiles = new();
     private readonly SceneHistory _history = new();
-    private SceneObject? _clipboard;
+    private readonly List<SceneObject> _clipboard = [];
 
     [ObservableProperty]
     private SceneDocument _scene = CreateNewScene();
@@ -32,20 +32,28 @@ public sealed partial class EditorSession : ObservableObject
     private string _statusText = "Avalonia editor ready";
 
     public ObservableCollection<ExplorerNodeViewModel> ExplorerRoots { get; } = [];
+    public ObservableCollection<SceneObject> SelectedObjects { get; } = [];
 
     public event EventHandler? SceneChanged;
     public event EventHandler? SelectionChanged;
 
     public EditorSession() => RebuildExplorer();
 
-    public string WindowTitle => $"2DCore — {ProjectName}{(IsModified ? " *" : string.Empty)}";
+    public string WindowTitle
+    {
+        get
+        {
+            string displayName = string.IsNullOrWhiteSpace(ProjectPath) ? ProjectName : Path.GetFileName(ProjectPath);
+            return $"2DCore Engine - {displayName}{(IsModified ? " *" : string.Empty)}";
+        }
+    }
 
     public void NewProject()
     {
         Scene = CreateNewScene();
         ProjectName = "New Project";
         ProjectPath = null;
-        SelectedObject = null;
+        ClearSelection(false);
         IsModified = false;
         _history.Clear();
         NotifyAll("Created a new project");
@@ -57,7 +65,7 @@ public sealed partial class EditorSession : ObservableObject
         Scene = loaded.Scene;
         ProjectName = loaded.ProjectName;
         ProjectPath = loaded.FilePath;
-        SelectedObject = null;
+        ClearSelection(false);
         IsModified = false;
         _history.Clear();
         NotifyAll($"Opened {Path.GetFileName(path)}");
@@ -82,7 +90,7 @@ public sealed partial class EditorSession : ObservableObject
         {
             Scene.EnsureSoundService().Children.Add(item);
         }
-        else if (parent is FolderObject)
+        else if (parent != null && parent is not SoundServiceObject)
         {
             parent.Children.Add(item);
         }
@@ -97,17 +105,16 @@ public sealed partial class EditorSession : ObservableObject
 
     public void DeleteSelected()
     {
-        if (SelectedObject == null || SelectedObject is SoundServiceObject) return;
+        SceneObject[] removable = SelectedObjects.Where(item => item is not SoundServiceObject).ToArray();
+        if (removable.Length == 0) return;
         Capture();
-        string name = SelectedObject.Name;
-        SceneGraph.Remove(Scene, SelectedObject);
-        SelectedObject = null;
-        NotifyAll($"Deleted {name}");
+        foreach (SceneObject item in removable) SceneGraph.Remove(Scene, item);
+        ClearSelection(false);
+        NotifyAll(removable.Length == 1 ? $"Deleted {removable[0].Name}" : $"Deleted {removable.Length} objects");
     }
 
     public bool Move(SceneObject item, SceneObject? newParent)
     {
-        if (newParent is not (null or FolderObject or SoundServiceObject)) return false;
         SceneDocument before = Scene.DeepClone();
         if (!SceneGraph.Move(Scene, item, newParent)) return false;
         _history.Capture(before);
@@ -119,37 +126,49 @@ public sealed partial class EditorSession : ObservableObject
 
     public void DuplicateSelected()
     {
-        if (SelectedObject == null || SelectedObject is SoundServiceObject) return;
+        SceneObject[] source = GetTopLevelSelection();
+        if (source.Length == 0) return;
         Capture();
-        SceneObject clone = SelectedObject.DeepClone();
-        SceneGraph.AssignNewIds(clone);
-        clone.Name = SceneGraph.GetUniqueName(Scene, SelectedObject.Name);
-        clone.Position = new(clone.Position.X + 20, clone.Position.Y + 20);
-        SceneObject? parent = SceneGraph.FindParent(Scene.Objects, SelectedObject);
-        if (parent == null) Scene.Objects.Add(clone);
-        else parent.Children.Add(clone);
-        Select(clone);
-        NotifyAll($"Duplicated {SelectedObject.Name}");
+        List<SceneObject> clones = [];
+        foreach (SceneObject item in source)
+        {
+            SceneObject clone = item.DeepClone();
+            SceneGraph.AssignNewIds(clone);
+            clone.Name = SceneGraph.GetUniqueName(Scene, item.Name);
+            clone.Position = new(clone.Position.X + 20, clone.Position.Y + 20);
+            SceneObject? parent = SceneGraph.FindParent(Scene.Objects, item);
+            if (parent == null) Scene.Objects.Add(clone);
+            else parent.Children.Add(clone);
+            clones.Add(clone);
+        }
+        SetSelection(clones);
+        NotifyAll(clones.Count == 1 ? $"Duplicated {source[0].Name}" : $"Duplicated {clones.Count} objects");
     }
 
     public void CopySelected()
     {
-        _clipboard = SelectedObject is SoundServiceObject or null ? null : SelectedObject.DeepClone();
-        StatusText = _clipboard == null ? "Nothing to copy" : $"Copied {_clipboard.Name}";
+        _clipboard.Clear();
+        _clipboard.AddRange(GetTopLevelSelection().Select(item => item.DeepClone()));
+        StatusText = _clipboard.Count == 0 ? "Nothing to copy" : _clipboard.Count == 1 ? $"Copied {_clipboard[0].Name}" : $"Copied {_clipboard.Count} objects";
     }
 
     public void Paste()
     {
-        if (_clipboard == null) return;
+        if (_clipboard.Count == 0) return;
         Capture();
-        SceneObject clone = _clipboard.DeepClone();
-        SceneGraph.AssignNewIds(clone);
-        clone.Name = SceneGraph.GetUniqueName(Scene, clone.Name);
-        clone.Position = new(clone.Position.X + 20, clone.Position.Y + 20);
-        if (clone is GlobalSoundObject) Scene.EnsureSoundService().Children.Add(clone);
-        else Scene.Objects.Add(clone);
-        Select(clone);
-        NotifyAll($"Pasted {clone.Name}");
+        List<SceneObject> pasted = [];
+        foreach (SceneObject source in _clipboard)
+        {
+            SceneObject clone = source.DeepClone();
+            SceneGraph.AssignNewIds(clone);
+            clone.Name = SceneGraph.GetUniqueName(Scene, clone.Name);
+            clone.Position = new(clone.Position.X + 20, clone.Position.Y + 20);
+            if (clone is GlobalSoundObject) Scene.EnsureSoundService().Children.Add(clone);
+            else Scene.Objects.Add(clone);
+            pasted.Add(clone);
+        }
+        SetSelection(pasted);
+        NotifyAll(pasted.Count == 1 ? $"Pasted {pasted[0].Name}" : $"Pasted {pasted.Count} objects");
     }
 
     public void Undo()
@@ -157,7 +176,7 @@ public sealed partial class EditorSession : ObservableObject
         SceneDocument? restored = _history.Undo(Scene);
         if (restored == null) return;
         Scene = restored;
-        SelectedObject = null;
+        ClearSelection(false);
         NotifyAll("Undo");
     }
 
@@ -166,7 +185,7 @@ public sealed partial class EditorSession : ObservableObject
         SceneDocument? restored = _history.Redo(Scene);
         if (restored == null) return;
         Scene = restored;
-        SelectedObject = null;
+        ClearSelection(false);
         NotifyAll("Redo");
     }
 
@@ -186,24 +205,56 @@ public sealed partial class EditorSession : ObservableObject
         OnPropertyChanged(nameof(WindowTitle));
     }
 
-    public void Select(SceneObject? item)
+    public bool IsSelected(SceneObject item) => SelectedObjects.Contains(item);
+
+    public void Select(SceneObject? item, bool additive = false, bool toggle = false)
     {
-        SelectedObject = item;
+        if (!additive) SelectedObjects.Clear();
+        if (item != null)
+        {
+            if (toggle && SelectedObjects.Contains(item)) SelectedObjects.Remove(item);
+            else if (!SelectedObjects.Contains(item)) SelectedObjects.Add(item);
+        }
+        SelectedObject = SelectedObjects.LastOrDefault();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        SceneChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetSelection(IEnumerable<SceneObject> items)
+    {
+        SelectedObjects.Clear();
+        foreach (SceneObject item in items.Distinct()) SelectedObjects.Add(item);
+        SelectedObject = SelectedObjects.LastOrDefault();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        SceneChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void ClearSelection(bool notify = true)
+    {
+        SelectedObjects.Clear();
+        SelectedObject = null;
+        if (!notify) return;
         SelectionChanged?.Invoke(this, EventArgs.Empty);
         SceneChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void RebuildExplorer()
     {
+        HashSet<Guid> expandedIds = ExplorerRoots
+            .SelectMany(TraverseExplorer)
+            .Where(node => node.IsExpanded && node.Item != null)
+            .Select(node => node.Item!.Id)
+            .ToHashSet();
         ExplorerRoots.Clear();
         ExplorerRoots.Add(new ExplorerNodeViewModel(
             "Scene",
-            "◉",
+            "avares://2DCore/EditorAssets/Icons/camera.png",
             null,
-            Scene.Objects.Where(item => item is not SoundServiceObject).Select(CreateExplorerNode)));
+            Scene.Objects.Where(item => item is not SoundServiceObject).Select(item => CreateExplorerNode(item, expandedIds)),
+            isExpanded: true));
         foreach (SoundServiceObject service in Scene.Objects.OfType<SoundServiceObject>())
         {
-            ExplorerRoots.Add(CreateExplorerNode(service));
+            ExplorerRoots.Add(CreateExplorerNode(service, expandedIds));
         }
     }
 
@@ -216,19 +267,34 @@ public sealed partial class EditorSession : ObservableObject
         OnPropertyChanged(nameof(WindowTitle));
     }
 
-    private static ExplorerNodeViewModel CreateExplorerNode(SceneObject item) => new(
-        item.Name,
-        GetIcon(item.Kind),
-        item,
-        item.Children.Select(CreateExplorerNode));
+    private SceneObject[] GetTopLevelSelection() => SelectedObjects
+        .Where(item => item is not SoundServiceObject)
+        .Where(item => !SelectedObjects.Any(other => !ReferenceEquals(item, other) && SceneGraph.IsDescendant(other, item)))
+        .ToArray();
 
-    private static string GetIcon(SceneObjectKind kind) => kind switch
+    private static IEnumerable<ExplorerNodeViewModel> TraverseExplorer(ExplorerNodeViewModel node)
     {
-        SceneObjectKind.Folder => "▰",
-        SceneObjectKind.Image => "▧",
-        SceneObjectKind.SoundService => "♫",
-        SceneObjectKind.Sound or SceneObjectKind.SoundTrigger or SceneObjectKind.SpatialSoundTrigger => "◖",
-        _ => "◆"
+        yield return node;
+        foreach (ExplorerNodeViewModel child in node.Children.SelectMany(TraverseExplorer)) yield return child;
+    }
+
+    private static ExplorerNodeViewModel CreateExplorerNode(SceneObject item, HashSet<Guid>? expandedIds = null) => new(
+        item.Name,
+        GetIcon(item),
+        item,
+        item.Children.Select(child => CreateExplorerNode(child, expandedIds)),
+        expandedIds?.Contains(item.Id) == true);
+
+    private static string GetIcon(SceneObject item) => item.Kind switch
+    {
+        SceneObjectKind.Folder => item.Children.Count > 0
+            ? "avares://2DCore/EditorAssets/Icons/folder_page.png"
+            : "avares://2DCore/EditorAssets/Icons/folder.png",
+        SceneObjectKind.Image => "avares://2DCore/EditorAssets/Icons/images.png",
+        SceneObjectKind.SoundService => "avares://2DCore/EditorAssets/Icons/sound_add.png",
+        SceneObjectKind.Sound => "avares://2DCore/EditorAssets/Icons/sound.png",
+        SceneObjectKind.SoundTrigger or SceneObjectKind.SpatialSoundTrigger => "avares://2DCore/EditorAssets/Icons/SoundTrigger.png",
+        _ => "avares://2DCore/EditorAssets/Icons/IconCore.png"
     };
 
     private static SceneDocument CreateNewScene()
